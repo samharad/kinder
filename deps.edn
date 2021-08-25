@@ -1,1 +1,2 @@
-{:deps {quil/quil {:mvn/version "3.1.0"}}}
+{:deps {quil/quil {:mvn/version "3.1.0"}
+        random-seed/random-seed {:mvn/version "1.0.0"}}}

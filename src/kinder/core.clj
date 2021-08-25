@@ -1,6 +1,13 @@
 (ns kinder.core
+  (:refer-clojure :exclude [rand rand-int rand-nth])
   (:require [quil.core :as q]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [random-seed.core :refer [rand rand-int rand-nth set-random-seed!]])
+  (:import (java.time LocalDateTime)
+           (java.util Random)))
+
+(def seed (-> (Random.) .nextLong))
+(set-random-seed! seed)
 
 (def kinder-palette {:main [57, 8, 93]
                      :accent #{[354, 99, 64]
@@ -39,7 +46,6 @@
         y'a y
         y'b (- (+ y h) h')
         r (with-some-color {:dim [w h']})]
-    (prn h)
     [(assoc r :loc [x y'a])
      (assoc r :loc [x y'b])]))
 
@@ -56,7 +62,6 @@
         x'a x
         x'b (- (+ x w) w')
         r (with-some-color {:dim [w' h]})]
-    (prn h)
     [(assoc r :loc [x'a y])
      (assoc r :loc [x'b y])]))
 
@@ -97,14 +102,12 @@
           (q/fill color)
           (q/rect (unit x) (unit y) (unit w) (unit h))
           children))
-      root-rect)))
-    ;(loop [rects [root-rect]]
-    ;  (doseq [{:keys [dim loc children]} rects]
-    ;    (let [[x y] loc
-    ;          [w h] dim]
-    ;      (q/rect x y w h))
-    ;    (when (seq children)
-    ;      (recur children))))))
+      root-rect))
+  (q/save (str "output/wip/"
+               (.toString (LocalDateTime/now))
+               "_"
+               seed
+               ".tif")))
 
 (comment
   (q/defsketch kinder
