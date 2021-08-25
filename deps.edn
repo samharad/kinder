@@ -1,0 +1,1 @@
+{:deps {quil/quil {:mvn/version "3.1.0"}}}
