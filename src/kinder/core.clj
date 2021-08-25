@@ -8,6 +8,10 @@
   (:import (java.time LocalDateTime)
            (java.util Random)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Config
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (def seed (-> (Random.) .nextLong))
 (set-random-seed! seed)
 
@@ -40,6 +44,19 @@
                 :color (:main palette)
                 :children []})
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Child-bearers
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn flip-axes [child-bearer-f]
+  (let [reversev (comp vec reverse)
+        flip-axes (fn [rect] (-> rect
+                                 (update :dim reversev)
+                                 (update :loc reversev)))]
+    (fn [rect]
+      (let [children (-> rect flip-axes child-bearer-f)]
+        (mapv flip-axes children)))))
+
 (defn horz-sym-children [rect]
   (let [{:keys [dim loc]} rect
         [w h] dim
@@ -50,32 +67,38 @@
         r {:dim [w h']}]
     (mapv with-some-color [(assoc r :loc [x y'a])
                            (assoc r :loc [x y'b])])))
+(def vert-sym-children (flip-axes horz-sym-children))
+
+(defn horz-rand-children [rect]
+  (let [{:keys [dim loc]} rect
+        [w h] dim
+        [x y] loc
+        num-kids (+ 2 (rand-int 4))
+        ranges (->> (repeatedly #(rand-nth (map inc (range y (+ y h)))))
+                    (take num-kids)
+                    (sort)
+                    (cons y)
+                    (partition 2 1)
+                    (map vec))
+        rs (map (fn [[ya yb]]
+                  (with-some-color {:dim [w (- yb ya)]
+                                    :loc [x ya]}))
+                ranges)]
+    rs))
+(def vert-rand-children (flip-axes horz-rand-children))
 
 (defn horz-children [rect]
-  (rand-nth [;; TODO: only horz sym children if room to chop into 3rds...
-             (horz-sym-children rect)]))
-
-
-(defn vert-sym-children [rect]
-  (let [reversev (comp vec reverse)
-        flip-axes (fn [rect] (-> rect
-                                 (update :dim reversev)
-                                 (update :loc reversev)))
-        children (-> rect flip-axes horz-sym-children)]
-    (mapv flip-axes children)))
-#_(defn vert-sym-children [rect]
-    (let [{:keys [dim loc]} rect
-          [w h] dim
-          [x y] loc
-          w' (inc (rand-int (int (/ w 3))))
-          x'a x
-          x'b (- (+ x w) w')
-          r (with-some-color {:dim [w' h]})]
-      [(assoc r :loc [x'a y])
-       (assoc r :loc [x'b y])]))
+  (rand-nth [
+             (horz-rand-children rect);; TODO: only horz sym children if room to chop into 3rds...
+             (horz-sym-children rect)
+             (horz-sym-children rect)
+             []]))
 
 (defn vert-children [rect]
-  (rand-nth [(vert-sym-children rect)]))
+  (rand-nth [(vert-sym-children rect)
+             (vert-sym-children rect)
+             (vert-rand-children rect)
+             []]))
 
 (defn make-direct-children [rect]
   (let [[w h] (:dim rect)]
