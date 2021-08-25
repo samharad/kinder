@@ -16,6 +16,17 @@
   (->> (range 1 (inc n))
        (filter #(zero? (rem n %)))))
 
+(defn weighted-selection [pairs]
+  (let [total (reduce + (map second pairs))
+        r (rand-int total)]
+    (reduce (fn [acc [v n]]
+              (let [acc' (+ acc n)]
+                (if (< r acc')
+                  (reduced v)
+                  acc')))
+            0
+            pairs)))
+
 (comment
   "TODO:
     - Bias horz/vert selection based on dimensions
@@ -27,6 +38,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def seed (-> (Random.) .nextLong))
+;(set-random-seed! -6734680809112462148)
 (set-random-seed! seed)
 
 (def kinder-palette {:main [57, 8, 93]
@@ -43,14 +55,11 @@
         is-large (or (> w 1) (> h 1))
         accent (rand-nth (seq (:accent palette)))
         main (:main palette)
-        rand (rand-int 10)
         color (if is-large
-                (if (= rand 1)
-                  accent
-                  main)
-                (if (> rand 3)
-                  accent
-                  main))]
+                (weighted-selection [[accent 1]
+                                     [main 10]])
+                (weighted-selection [[accent 1]
+                                     [main 3]]))]
     (assoc rect :color color)))
 
 (def seed-rect {:dim [30 60]
@@ -76,7 +85,9 @@
         [w h] dim
         [x y] loc
         divs (divisors h)
-        div (rand-nth divs)] ;; TODO bias this to 1
+        div (weighted-selection (mapv #(vector %1 %2)
+                                      divs
+                                      (range (count divs) 0 -1)))]
     (->> (range y (+ y h) div)
          ;; TODO fix coloring
          (map #(with-some-color {:dim [w div]
@@ -92,6 +103,7 @@
         y'b (- (+ y h) h')
         r {:dim [w h']}]
     (mapv with-some-color [(assoc r :loc [x y'a])
+                           {:loc [x (+ y'a h')] :dim [w (- h h' h')]}
                            (assoc r :loc [x y'b])])))
 (def vert-sym-children (flip-axes horz-sym-children))
 
@@ -113,18 +125,41 @@
     rs))
 (def vert-rand-children (flip-axes horz-rand-children))
 
-(defn horz-children [rect]
-  (rand-nth [
-             (horz-rand-children rect);; TODO: only horz sym children if room to chop into 3rds...
-             (horz-even-children rect)
-             (horz-sym-children rect)
-             []]))
+(defn children [sym rand even]
+  (fn [rect]
+    (let [{:keys [dim]} rect
+          [w h] dim
+          seed-dim (:dim seed-rect)
+          [seed-w seed-h] seed-dim
+          is-pretty-small (and (< w (* 0.15 seed-w))
+                               (< h (* 0.15 seed-h)))
+          is-pretty-big (or (> w (* 0.5 seed-w))
+                            (> h (* 0.5 seed-h)))
+          f (cond
+              is-pretty-big
+              (weighted-selection [[sym 6
+                                    rand 3]])
 
-(defn vert-children [rect]
-  (rand-nth [(vert-sym-children rect)
-             (vert-even-children rect)
-             (vert-rand-children rect)
-             []]))
+              is-pretty-small
+              (weighted-selection [[even 2]
+                                   [rand 1]
+                                   [sym 1]
+                                   [(constantly []) 10]])
+
+              :else
+              (weighted-selection [[sym 4]
+                                   [rand 8]
+                                   [even 2]
+                                   [(constantly []) 40]]))]
+      (f rect))))
+
+(def horz-children (children horz-sym-children
+                             horz-rand-children
+                             horz-even-children))
+
+(def vert-children (children vert-sym-children
+                             vert-rand-children
+                             vert-even-children))
 
 (defn make-direct-children [rect]
   (let [[w h] (:dim rect)]
