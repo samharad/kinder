@@ -2,7 +2,9 @@
   (:refer-clojure :exclude [rand rand-int rand-nth])
   (:require [quil.core :as q]
             [clojure.walk :as walk]
-            [random-seed.core :refer [rand rand-int rand-nth set-random-seed!]])
+            [random-seed.core :refer [rand rand-int rand-nth set-random-seed!]]
+            [clojure.java.shell :refer [sh]]
+            [clojure.string :as str])
   (:import (java.time LocalDateTime)
            (java.util Random)))
 
@@ -45,9 +47,9 @@
         h' (inc (rand-int (int (/ h 3))))
         y'a y
         y'b (- (+ y h) h')
-        r (with-some-color {:dim [w h']})]
-    [(assoc r :loc [x y'a])
-     (assoc r :loc [x y'b])]))
+        r {:dim [w h']}]
+    (mapv with-some-color [(assoc r :loc [x y'a])
+                           (assoc r :loc [x y'b])])))
 
 (defn horz-children [rect]
   (rand-nth [;; TODO: only horz sym children if room to chop into 3rds...
@@ -55,15 +57,22 @@
 
 
 (defn vert-sym-children [rect]
-  (let [{:keys [dim loc]} rect
-        [w h] dim
-        [x y] loc
-        w' (inc (rand-int (int (/ w 3))))
-        x'a x
-        x'b (- (+ x w) w')
-        r (with-some-color {:dim [w' h]})]
-    [(assoc r :loc [x'a y])
-     (assoc r :loc [x'b y])]))
+  (let [reversev (comp vec reverse)
+        flip-axes (fn [rect] (-> rect
+                                 (update :dim reversev)
+                                 (update :loc reversev)))
+        children (-> rect flip-axes horz-sym-children)]
+    (mapv flip-axes children)))
+#_(defn vert-sym-children [rect]
+    (let [{:keys [dim loc]} rect
+          [w h] dim
+          [x y] loc
+          w' (inc (rand-int (int (/ w 3))))
+          x'a x
+          x'b (- (+ x w) w')
+          r (with-some-color {:dim [w' h]})]
+      [(assoc r :loc [x'a y])
+       (assoc r :loc [x'b y])]))
 
 (defn vert-children [rect]
   (rand-nth [(vert-sym-children rect)]))
@@ -103,11 +112,17 @@
           (q/rect (unit x) (unit y) (unit w) (unit h))
           children))
       root-rect))
-  (q/save (str "output/wip/"
-               (.toString (LocalDateTime/now))
-               "_"
-               seed
-               ".tif")))
+  (let [commit-msg (-> (sh "git" "log" "-1" "--pretty=%s")
+                       :out
+                       (str/trim)
+                       (str/replace " " "-"))]
+    (q/save (str "output/wip/"
+                 (.toString (LocalDateTime/now))
+                 "_"
+                 seed
+                 "_"
+                 commit-msg
+                 ".tif"))))
 
 (comment
   (q/defsketch kinder
