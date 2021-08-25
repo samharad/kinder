@@ -9,6 +9,20 @@
            (java.util Random)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Util
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn divisors [n]
+  (->> (range 1 (inc n))
+       (filter #(zero? (rem n %)))))
+
+(comment
+  "TODO:
+    - Bias horz/vert selection based on dimensions
+    - Bias child-gen function by size/dimension
+  ")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Config
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -57,6 +71,18 @@
       (let [children (-> rect flip-axes child-bearer-f)]
         (mapv flip-axes children)))))
 
+(defn horz-even-children [rect]
+  (let [{:keys [dim loc]} rect
+        [w h] dim
+        [x y] loc
+        divs (divisors h)
+        div (rand-nth divs)] ;; TODO bias this to 1
+    (->> (range y (+ y h) div)
+         ;; TODO fix coloring
+         (map #(with-some-color {:dim [w div]
+                                 :loc [x %]})))))
+(def vert-even-children (flip-axes horz-even-children))
+
 (defn horz-sym-children [rect]
   (let [{:keys [dim loc]} rect
         [w h] dim
@@ -90,13 +116,13 @@
 (defn horz-children [rect]
   (rand-nth [
              (horz-rand-children rect);; TODO: only horz sym children if room to chop into 3rds...
-             (horz-sym-children rect)
+             (horz-even-children rect)
              (horz-sym-children rect)
              []]))
 
 (defn vert-children [rect]
   (rand-nth [(vert-sym-children rect)
-             (vert-sym-children rect)
+             (vert-even-children rect)
              (vert-rand-children rect)
              []]))
 
@@ -119,6 +145,10 @@
 (defn unit
   ([] 10.0)
   ([v] (* (unit) v)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Quil
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn setup [])
 (defn draw []
