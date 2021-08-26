@@ -29,6 +29,8 @@
 
 (comment
   "TODO:
+    - Make the 'rand' child-gen less random, per source
+    - Thicken the lines
     - Step-through generator; generate one layer at a time
     - Tweak parameters
     - Circles
@@ -76,6 +78,7 @@
                               [121, 41, 57]
                               [215, 99, 45]
                               [35, 77, 91]]})
+                              ;[0, 100, 0]]})
 
 (def palette (rand-nth [kinder-palette]))
 
@@ -291,6 +294,7 @@
   (q/no-loop)
   (q/color-mode :hsb 360 100 100 1.0)
   (q/background 360 0 100)
+  (q/stroke-weight 10)
   (q/with-translation [20 20]
     (walk/prewalk
       (fn [rect]
