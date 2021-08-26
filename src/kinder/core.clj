@@ -294,7 +294,7 @@
   (q/no-loop)
   (q/color-mode :hsb 360 100 100 1.0)
   (q/background 360 0 100)
-  (q/stroke-weight 10)
+  (q/stroke-weight 20)
   (q/with-translation [20 20]
     (walk/prewalk
       (fn [rect]
