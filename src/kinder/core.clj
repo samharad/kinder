@@ -33,6 +33,34 @@
     - Checker-colors. I think this requires either: coloring a box
       with respect to its parent, or just doing the coloring as a
       second pass.
+    - A parent box can be 'red'. And then, when I give it covering
+      even-spaced children, those can take be colored in alternating
+      (parent-color, plain, parent-color, plain...). But the problem
+      is, we alternate stripes, and then when we go to color a white
+      stripe, which color do we choose... you kind of want the grand-
+      parent color. Hmmmmm.
+      Or, each box has an indexed-based ID.
+      Root-box: ''
+      Children: ['0', '1', '2']
+      Children of that: [['00', '01', '02'],
+                         ['10', '11', '12'],
+                         ['20', '21', '22']]
+      Boxes inherit the color-assignment of their parent, but only
+      express it based on their ID, particularly its last two digits
+      (if they are both even or both odd), combined with some jitter.
+      Assigned color is always an accent.
+      Assigned color might 'mutate' in a child, randomly. Much more
+      likely to occur when the parent is a large box. Also depends
+      on the child-gen method: mutation is more likely for random-gen,
+      less likely for even-gen.
+
+    - Refactor.
+
+      seed-rect :: Rect
+      give-children :: Rect -> Rect
+      with-children :: Rect -> [Rect] -> Rect
+      with-color :: Rect -> Color -> Rect
+
   ")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -40,7 +68,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def seed (-> (Random.) .nextLong))
-;(set-random-seed! -6734680809112462148)
+;(set-random-seed! -9120299532266499569)
 (set-random-seed! seed)
 
 (def kinder-palette {:main [57, 8, 93]
@@ -67,6 +95,7 @@
 (def seed-rect {:dim [30 60]
                 :loc [0 0]
                 :color (:main palette)
+                :id ""
                 :children []})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -118,6 +147,8 @@
                     (take num-kids)
                     (sort)
                     (cons y)
+                    (vec))
+        ranges (->> (conj ranges (+ y h))
                     (partition 2 1)
                     (map vec))
         rs (map (fn [[ya yb]]
@@ -160,8 +191,11 @@
               (weighted-selection [[sym 4]
                                    [rand 8]
                                    [even 2]
-                                   [(constantly []) 10]]))]
-      (f rect))))
+                                   [(constantly []) 10]]))
+            children (f rect)]
+      (map-indexed (fn [i child]
+                     (assoc child :id (str (:id rect) i)))
+                   children))))
 
 (def horz-children (children horz-sym-children
                              horz-rand-children
@@ -206,11 +240,19 @@
   (q/with-translation [20 20]
     (walk/prewalk
       (fn [rect]
-        (let [{:keys [dim loc children color]} rect
+        (let [{:keys [dim loc children color id]} rect
               [x y] loc
               [w h] dim]
-          (q/fill color)
+          ;; Set child-bearing box color to neon pink so that
+          ;; we can catch impartial tiling!
+          (if (not-empty children)
+            (q/fill 315 100 100)
+            (q/fill color))
           (q/rect (unit x) (unit y) (unit w) (unit h))
+          #_(when (not (seq children))
+              (q/fill 360 0 0)
+              (q/text id (+ (unit x) (/ (unit w) 2))
+                         (+ (unit y) (/ (unit h) 2))))
           children))
       root-rect))
   (let [commit-msg (-> (sh "git" "log" "-1" "--pretty=%s")
