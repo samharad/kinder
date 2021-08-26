@@ -29,8 +29,10 @@
 
 (comment
   "TODO:
-    - Bias horz/vert selection based on dimensions
-    - Bias child-gen function by size/dimension
+    - Only color small, square boxes
+    - Checker-colors. I think this requires either: coloring a box
+      with respect to its parent, or just doing the coloring as a
+      second pass.
   ")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -133,12 +135,20 @@
           [seed-w seed-h] seed-dim
           is-pretty-small (and (< w (* 0.15 seed-w))
                                (< h (* 0.15 seed-h)))
-          is-pretty-big (or (> w (* 0.5 seed-w))
-                            (> h (* 0.5 seed-h)))
+          is-pretty-big (and (> w (* 0.5 seed-w))
+                             (> h (* 0.5 seed-h)))
+          is-very-big (and (> w (* 0.9 seed-w))
+                           (> h (* 0.9 seed-h)))
+
           f (cond
+              is-very-big
+              (weighted-selection [[sym 6]
+                                   [rand 3]])
+
               is-pretty-big
-              (weighted-selection [[sym 6
-                                    rand 3]])
+              (weighted-selection [[sym 6]
+                                   [rand 3]
+                                   [(constantly []) 2]])
 
               is-pretty-small
               (weighted-selection [[even 2]
@@ -150,7 +160,7 @@
               (weighted-selection [[sym 4]
                                    [rand 8]
                                    [even 2]
-                                   [(constantly []) 40]]))]
+                                   [(constantly []) 10]]))]
       (f rect))))
 
 (def horz-children (children horz-sym-children
@@ -162,13 +172,16 @@
                              vert-even-children))
 
 (defn make-direct-children [rect]
-  (let [[w h] (:dim rect)]
+  (let [[w h] (:dim rect)
+        is-vert (> h w)]
     (cond
       (and (<= w 1) (<= h 1)) []
       (<= w 1) (horz-children rect)
       (<= h 1) (vert-children rect)
-      :else (rand-nth [(horz-children rect)
-                       (vert-children rect)]))))
+      is-vert (weighted-selection [[(horz-children rect) 10]
+                                   [(vert-children rect) 1]])
+      :else (weighted-selection [[(horz-children rect) 1]
+                                 [(vert-children rect) 10]]))))
 
 (defn with-random-children [rect]
   (let [children (make-direct-children rect)
