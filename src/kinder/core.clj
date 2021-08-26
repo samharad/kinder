@@ -29,6 +29,7 @@
 
 (comment
   "TODO:
+    - Step-through generator; generate one layer at a time
     - Tweak parameters
     - Circles
     - Refactor
@@ -208,8 +209,13 @@
                              (> h (* 0.5 seed-h)))
           is-very-big (and (> w (* 0.9 seed-w))
                            (> h (* 0.9 seed-h)))
-          is-skinny (or (<= w 2) (<= h 2))
-          is-short (or (<= w 10) (<= h 10))
+
+          is-short-and-skinny (or
+                                (and (<= w 3) (<= h 10))
+                                (and (<= h 3) (<= w 10)))
+          skinny 2 ;; TODO tweak me
+          is-skinny (or (<= w skinny) (<= h skinny))
+          ;is-short (or (<= w 10) (<= h 10))
 
           f (cond
               is-very-big
@@ -221,11 +227,12 @@
                                    [rand 3]
                                    [(constantly []) 2]])
 
-              (and is-short is-skinny)
-              (weighted-selection [[sym 10]
-                                   [even 10]
-                                   [rand 10]
-                                   [(constantly []) 10]])
+              ;is-short-and-skinny
+              is-skinny ;; TODO tweak me
+              (weighted-selection [[even 10]])
+                                   ;[even 10]
+                                   ;[rand 10]
+                                   ;[(constantly []) 10]])
 
               is-pretty-small
               (weighted-selection [[even 2]
