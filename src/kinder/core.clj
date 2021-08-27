@@ -29,7 +29,10 @@
 
 (comment
   "TODO:
+    - Make it smooth and good-looking
+    - Decouple is-complete from circles
     - 2x2s, 3x3s should be more likely to mutate color
+    - Make larger accent squares just slightly more common
     - Make the 'rand' child-gen less random, per source
     - Find a happy stroke weight (currently needs to be an odd #)
     - Mark boxes as 'DONE'; make them bright pink until they're done;
@@ -40,6 +43,8 @@
     - I know why the checkering is inconsistent. It's because a box
       might first divide evenly into stripes, then each of those may
       divide randomly, then checker.
+    - Utils for marking the save-file for particularly good ones
+    - More palettes
 
    CHECKER-COLORS EXPLANATION:
     - Checker-colors. I think this requires either: coloring a box
@@ -139,7 +144,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Child-bearers
+;; Rect child-bearers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn flip-axes [child-bearer-f]
@@ -228,6 +233,9 @@
           skinny 3 ;; TODO tweak me
           is-skinny (or (<= w skinny) (<= h skinny))
           is-maximally-skinny (or (= w 1) (= h 1))
+
+          is-long-and-maximally-skinny (and is-maximally-skinny
+                                            (or (> w 10) (> h 10)))
           ;is-short (or (<= w 10) (<= h 10))
 
           f (cond
@@ -243,11 +251,16 @@
                                    [rand 3]
                                    [(constantly []) 4]])
 
+              is-long-and-maximally-skinny
+              (weighted-selection [[even 10]
+                                   [rand 10]
+                                   [(constantly []) 10]])
+
               is-maximally-skinny
               (weighted-selection [[even 10]
                                    ;[even 10]
                                    ;[rand 10]
-                                   [(constantly []) 2]])
+                                   [(constantly []) 4]])
 
               ;is-short-and-skinny
               is-skinny ;; TODO tweak me
@@ -303,30 +316,63 @@
       (update rect :children (partial map #(take-depth (dec depth) %)))
       rect)))
 
-(defn with-random-children
-  ([rect]
-   (-> rect
-       (with-some-direct-children)
-       (update :children (partial map #(with-random-children %)))))
-  #_([rect depth-to-realize]
-     (if (= 0 depth-to-realize)
-       rect
-       (-> rect
-           (with-some-direct-children)
-           (update :children (partial map #(with-random-children % (dec depth-to-realize))))))))
+(defn with-random-children [rect]
+  (-> rect
+      (with-some-direct-children)
+      (update :children (partial map #(with-random-children %)))))
 
-#_(defn realize [state]
-    (let [{:keys [depth-to-realize root-rect]} state]
-      (assoc state :root-rect (with-random-children root-rect depth-to-realize))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Circles
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn own-corner-coords [rect]
+  (let [{:keys [loc dim]} rect
+        [w h] dim
+        [x y] loc
+        corners [[x y]
+                 [x (+ y h)]
+                 [(+ x w) y]
+                 [(+ x w) (+ y h)]]]
+    (set corners)))
+
+(defn all-corner-coords [rect]
+  (let [corners (own-corner-coords rect)]
+    (reduce into corners (map all-corner-coords (:children rect)))))
+
+(defn some-circles [rect]
+  ;; TODO! Need to be:
+  ;;  - In bounds
+  ;;  - Non-overlapping, not touching
+  ;;  - Sometimes plain colored
+  ;;  - Possibly: in a general cluster
+  ;;  - Not on 'phantom' corners (bug)
+  (let [all-corners (all-corner-coords rect)
+        num-circles (rand-nth (range 3 6))
+        selected-corners (repeatedly num-circles #(rand-nth (vec all-corners)))]
+    (map #(identity {:loc %
+                     :rad (rand-nth (range 2 6))
+                     :color (some-accent-color)})
+         selected-corners)))
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; STATE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn init-state []
   (let [seed (-> (Random.) .nextLong)
         _ (set-random-seed! seed)
-        root-rect (with-random-children seed-rect)]
+        root-rect (with-random-children seed-rect)
+        circles (some-circles root-rect)]
     {:seed seed
      :depth-to-realize 0
      :root-rect root-rect
-     :render-rect seed-rect}))
+     :render-rect seed-rect
+     :circles circles}))
 
 (defn reset-state [state]
   (init-state))
@@ -374,7 +420,6 @@
    (step)))
 
 (run)
-
 (declare refresh)
 (comment
   (do
@@ -394,7 +439,8 @@
 ;; Quil
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn setup-kinder [])
+(defn setup-kinder []
+  (q/smooth))
 (defn draw-kinder []
   (q/no-loop)
   (q/color-mode :hsb 360 100 100 1.0)
@@ -418,7 +464,13 @@
                                 (q/text id (+ (unit x))
                                            (+ (unit y) (/ (unit h) 2))))
                             children))
-                        (:render-rect @state)))
+                        (:render-rect @state))
+                      (when (:is-complete @state)
+                        (doseq [circle (:circles @state)]
+                          (let [{:keys [loc rad color]} circle
+                                [x y] loc]
+                            (q/fill color)
+                            (q/ellipse (unit x) (unit y) (unit rad) (unit rad))))))
   ;; STATS section
   (q/with-translation [20 650]
     (when (:is-complete @state)
@@ -448,5 +500,7 @@
 
 (defn refresh []
   (.loop kinder))
+
+(prn (some-circles (:render-rect @state)))
 
 (refresh)
