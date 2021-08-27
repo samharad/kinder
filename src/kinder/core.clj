@@ -30,8 +30,9 @@
 (comment
   "TODO:
     - Make the 'rand' child-gen less random, per source
-    - Thicken the lines
-    - Step-through generator; generate one layer at a time
+    - Find a happy stroke weight (currently needs to be an odd #)
+    - Mark boxes as 'DONE'; make them bright pink until they're done;
+      will help with step-through comprehensibility.
     - Tweak parameters
     - Circles
     - Refactor
@@ -69,10 +70,6 @@
 ;; Config
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def seed (-> (Random.) .nextLong))
-;(set-random-seed! -9120299532266499569)
-(set-random-seed! seed)
-
 (def kinder-palette {:main [57, 8, 93]
                      :accent [[354, 99, 64]
                               [121, 41, 57]
@@ -80,12 +77,19 @@
                               [35, 77, 91]]})
                               ;[0, 100, 0]]})
 
-(def palette (rand-nth [kinder-palette]))
+(def palette kinder-palette)
+
+(defn main-color []
+  (:main palette))
+
+(defn some-accent-color []
+  (rand-nth (:accent palette)))
 
 (def seed-rect {:dim [30 60]
                 :loc [0 0]
-                :assigned-color (:main palette)
-                :color (:main palette)
+                ;:assigned-color (some-accent-color)
+                :assigned-color (first (:accent palette))
+                :color (main-color)
                 :id ""
                 :children []})
 
@@ -99,10 +103,10 @@
         color (cond
                 (or (> w 3) (> h 3))
                 (weighted-selection [[parent-color 1]
-                                     [(rand-nth (:accent palette)) 10]])
+                                     [(some-accent-color) 10]])
                 :else
                 (weighted-selection [[parent-color 10]
-                                     [(rand-nth (:accent palette)) 1]]))]
+                                     [(some-accent-color) 1]]))]
     (assoc rect :assigned-color color)))
 
 (defn express-some-color [rect]
@@ -110,7 +114,7 @@
         [w h] dim
         is-large (or (> w 3) (> h 3))
         accent assigned-color
-        main (:main palette)
+        main (main-color)
         is-square (= w h)
         [id-a id-b] (concat
                       (->> id
@@ -121,7 +125,8 @@
         id-indicates-color (= (mod id-a 2) (mod id-b 2))
         color (cond
                 (not is-square) main
-                is-large (weighted-selection [[main 1]])
+                is-large (weighted-selection [[main 10]
+                                              [accent 3]])
                 id-indicates-color (weighted-selection [[accent 10]
                                                         [main 1]])
                 :else (weighted-selection [[main 10]
@@ -213,14 +218,20 @@
           is-very-big (and (> w (* 0.9 seed-w))
                            (> h (* 0.9 seed-h)))
 
+          is-seed-rect (and (= w seed-w)
+                            (= h seed-h))
+
           is-short-and-skinny (or
                                 (and (<= w 3) (<= h 10))
                                 (and (<= h 3) (<= w 10)))
-          skinny 2 ;; TODO tweak me
+          skinny 3 ;; TODO tweak me
           is-skinny (or (<= w skinny) (<= h skinny))
           ;is-short (or (<= w 10) (<= h 10))
 
           f (cond
+              is-seed-rect
+              (weighted-selection [[sym 1]])
+
               is-very-big
               (weighted-selection [[sym 6]
                                    [rand 3]])
@@ -228,14 +239,14 @@
               is-pretty-big
               (weighted-selection [[sym 6]
                                    [rand 3]
-                                   [(constantly []) 2]])
+                                   [(constantly []) 4]])
 
               ;is-short-and-skinny
               is-skinny ;; TODO tweak me
-              (weighted-selection [[even 10]])
+              (weighted-selection [[even 10]
                                    ;[even 10]
                                    ;[rand 10]
-                                   ;[(constantly []) 10]])
+                                   [(constantly []) 6]])
 
               is-pretty-small
               (weighted-selection [[even 2]
@@ -249,10 +260,7 @@
                                    [even 2]
                                    [(constantly []) 10]]))
             children (f rect)]
-      children
-      #_(map-indexed (fn [i child]
-                       (assoc child :id (str (:id rect) i)))
-                     children))))
+      children)))
 
 (def horz-children (children horz-sym-children
                              horz-rand-children
@@ -274,12 +282,69 @@
       :else (weighted-selection [[(horz-children rect) 1]
                                  [(vert-children rect) 10]]))))
 
-(defn with-random-children [rect]
-  (let [children (make-direct-children rect)
-        children (map with-random-children children)]
+(defn with-some-direct-children [rect]
+  (let [children (make-direct-children rect)]
     (assoc rect :children children)))
 
-(def root-rect (with-random-children seed-rect))
+(defn take-depth [depth rect]
+  (if (zero? depth)
+    (if (:children rect)
+      (assoc rect :children [])
+      rect)
+    (if (:children rect)
+      (update rect :children (partial map #(take-depth (dec depth) %)))
+      rect)))
+
+(defn with-random-children
+  ([rect]
+   (-> rect
+       (with-some-direct-children)
+       (update :children (partial map #(with-random-children %)))))
+  #_([rect depth-to-realize]
+     (if (= 0 depth-to-realize)
+       rect
+       (-> rect
+           (with-some-direct-children)
+           (update :children (partial map #(with-random-children % (dec depth-to-realize))))))))
+
+#_(defn realize [state]
+    (let [{:keys [depth-to-realize root-rect]} state]
+      (assoc state :root-rect (with-random-children root-rect depth-to-realize))))
+
+(defn init-state []
+  (let [seed (-> (Random.) .nextLong)
+        _ (set-random-seed! seed)
+        root-rect (with-random-children seed-rect)]
+    {:seed seed
+     :depth-to-realize 0
+     :root-rect root-rect
+     :render-rect seed-rect}))
+
+(defn reset-state [state]
+  (init-state))
+
+(defonce state (atom (init-state)))
+
+(comment)
+  ;(swap! state realize))
+
+(defn step-state [state]
+  (let [{:keys [depth-to-realize root-rect render-rect]} state]
+    ;(set-random-seed! seed)
+    (let [depth-to-realize' (inc depth-to-realize)
+          render-rect' (take-depth depth-to-realize' root-rect)
+          is-complete (= render-rect' (take-depth (inc depth-to-realize') root-rect))]
+      (if (= render-rect render-rect')
+        (reset-state state)
+        (-> state
+            (assoc :depth-to-realize depth-to-realize')
+            (assoc :render-rect render-rect')
+            (assoc :is-complete is-complete))))))
+
+(swap! state step-state)
+
+(def render-rect (:render-rect @state))
+(def is-complete (:is-complete @state))
 
 (defn unit
   ([] 10.0)
@@ -289,31 +354,37 @@
 ;; Quil
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn setup [])
-(defn draw []
+(defn setup-kinder [])
+(defn draw-kinder []
   (q/no-loop)
   (q/color-mode :hsb 360 100 100 1.0)
   (q/background 360 0 100)
   (q/stroke-weight 3)
   (q/with-translation [20 20]
-    (walk/prewalk
-      (fn [rect]
-        (let [{:keys [dim loc children color id]} rect
-              [x y] loc
-              [w h] dim]
-          ;; Set child-bearing box color to neon pink so that
-          ;; we can catch impartial tiling!
-          (if (not-empty children)
-            (q/fill 315 100 100)
-            (q/fill color))
-          (q/rect (unit x) (unit y) (unit w) (unit h))
-          #_(when (not (seq children))
-              (q/fill 360 0 0)
-              (q/text-size 8)
-              (q/text id (+ (unit x))
-                         (+ (unit y) (/ (unit h) 2))))
-          children))
-      root-rect))
+                      (walk/prewalk
+                        (fn [rect]
+                          (let [{:keys [dim loc children color id]} rect
+                                [x y] loc
+                                [w h] dim]
+                            ;; Set child-bearing box color to neon pink so that
+                            ;; we can catch impartial tiling!
+                            (if (not-empty children)
+                              (q/fill 315 100 100)
+                              (q/fill color))
+                            (q/rect (unit x) (unit y) (unit w) (unit h))
+                            #_(when (not (seq children))
+                                (q/fill 360 0 0)
+                                (q/text-size 8)
+                                (q/text id (+ (unit x))
+                                           (+ (unit y) (/ (unit h) 2))))
+                            children))
+                        render-rect))
+  ;; STATS section
+  (q/with-translation [20 650]
+    (when is-complete
+      (q/fill 0)
+      (q/text-size 30)
+      (q/text "DONE!" 0 0)))
   (let [commit-msg (-> (sh "git" "log" "-1" "--pretty=%s")
                        :out
                        (str/trim)
@@ -326,13 +397,14 @@
                  commit-msg
                  ".tif"))))
 
+
 (comment
   (q/defsketch kinder
-    :title "Kinder"
-    :setup kinder.core/setup
-    :draw kinder.core/draw
-    :features [:keep-on-top :resizable]
-    :size [400 700]))
+               :title "Kinder"
+               :setup kinder.core/setup-kinder
+               :draw kinder.core/draw-kinder
+               :features [:keep-on-top :resizable]
+               :size [400 700]))
 
 (defn refresh []
   (.loop kinder))
