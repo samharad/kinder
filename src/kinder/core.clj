@@ -29,6 +29,7 @@
 
 (comment
   "TODO:
+    - 2x2s, 3x3s should be more likely to mutate color
     - Make the 'rand' child-gen less random, per source
     - Find a happy stroke weight (currently needs to be an odd #)
     - Mark boxes as 'DONE'; make them bright pink until they're done;
@@ -226,6 +227,7 @@
                                 (and (<= h 3) (<= w 10)))
           skinny 3 ;; TODO tweak me
           is-skinny (or (<= w skinny) (<= h skinny))
+          is-maximally-skinny (or (= w 1) (= h 1))
           ;is-short (or (<= w 10) (<= h 10))
 
           f (cond
@@ -240,6 +242,12 @@
               (weighted-selection [[sym 6]
                                    [rand 3]
                                    [(constantly []) 4]])
+
+              is-maximally-skinny
+              (weighted-selection [[even 10]
+                                   ;[even 10]
+                                   ;[rand 10]
+                                   [(constantly []) 2]])
 
               ;is-short-and-skinny
               is-skinny ;; TODO tweak me
@@ -325,30 +333,62 @@
 
 (defonce state (atom (init-state)))
 
-(comment)
-  ;(swap! state realize))
-
 (defn step-state [state]
-  (let [{:keys [depth-to-realize root-rect render-rect]} state]
-    ;(set-random-seed! seed)
-    (let [depth-to-realize' (inc depth-to-realize)
-          render-rect' (take-depth depth-to-realize' root-rect)
-          is-complete (= render-rect' (take-depth (inc depth-to-realize') root-rect))]
-      (if (= render-rect render-rect')
-        (reset-state state)
+  (let [{:keys [depth-to-realize root-rect is-complete]} state]
+    (if is-complete
+      state
+      (let [depth-to-realize' (inc depth-to-realize)
+            render-rect' (take-depth depth-to-realize' root-rect)
+            is-complete (= render-rect' (take-depth (inc depth-to-realize') root-rect))]
         (-> state
             (assoc :depth-to-realize depth-to-realize')
             (assoc :render-rect render-rect')
             (assoc :is-complete is-complete))))))
 
-(swap! state step-state)
+(defn back-state [state]
+  (let [{:keys [depth-to-realize root-rect render-rect]} state]
+    (if (= render-rect seed-rect)
+      (do
+        (prn "here")
+        state)
+      (let [depth-to-realize' (dec depth-to-realize)
+            render-rect' (take-depth depth-to-realize' root-rect)]
+        (prn "here")
+        (-> state
+            (assoc :depth-to-realize depth-to-realize')
+            (assoc :render-rect render-rect')
+            (assoc :is-complete false))))))
 
-(def render-rect (:render-rect @state))
-(def is-complete (:is-complete @state))
 
-(defn unit
-  ([] 10.0)
-  ([v] (* (unit) v)))
+(defn reset []
+  (swap! state reset-state))
+
+(defn step []
+  (if (:is-complete @state)
+    (swap! state reset-state)
+    (swap! state step-state)))
+
+(defn run []
+  (reset)
+  (while (not (:is-complete @state))
+   (step)))
+
+(run)
+
+(declare refresh)
+(comment
+  (do
+    (swap! state back-state)
+    (refresh))
+
+
+
+
+
+
+  (defn unit
+    ([] 10.0)
+    ([v] (* (unit) v))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Quil
@@ -378,10 +418,10 @@
                                 (q/text id (+ (unit x))
                                            (+ (unit y) (/ (unit h) 2))))
                             children))
-                        render-rect))
+                        (:render-rect @state)))
   ;; STATS section
   (q/with-translation [20 650]
-    (when is-complete
+    (when (:is-complete @state)
       (q/fill 0)
       (q/text-size 30)
       (q/text "DONE!" 0 0)))
