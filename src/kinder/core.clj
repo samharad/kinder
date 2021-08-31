@@ -371,29 +371,18 @@
 
 
 (defn some-circles [rect]
-  (let [num-circles (rand-nth (range 3 6))]
+  ;; TODO! Need to be:
+  ;;  - Sometimes plain colored
+  ;;  - Possibly: in a general cluster
+  ;;  - Not on 'phantom' corners (bug)
+  (let [num-circles (rand-nth (range 3 5))]
     (loop [circles []
            calls 0]
       (if (= calls num-circles)
         circles
         (recur (into circles
                      (some-circle rect circles))
-               (inc calls)))))
-  ;; TODO! Need to be:
-  ;;  - In bounds
-  ;;  - Non-overlapping, not touching
-  ;;  - Sometimes plain colored
-  ;;  - Possibly: in a general cluster
-  ;;  - Not on 'phantom' corners (bug)
-  #_(let [all-corners (all-corner-coords rect)
-          num-circles (rand-nth (range 3 6))
-          selected-corners (repeatedly num-circles #(rand-nth (vec all-corners)))]
-      ;; Force immediate realization, since I'm using dynamic binding elsewhere
-      (doall
-        (map #(identity {:loc %
-                         :rad (rand-nth (range 2 6))
-                         :color (some-accent-color)})
-             selected-corners))))
+               (inc calls))))))
 
 (comment
   "What should the interface of this module be?
