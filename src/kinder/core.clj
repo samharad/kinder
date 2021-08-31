@@ -68,7 +68,7 @@
 (def red-palette {:main [57, 8, 93]
                   :accent [[354, 99, 64]]})
 
-(def palettes [kinder-palette red-palette])
+(def palettes [kinder-palette #_red-palette])
 
 (def ^:dynamic palette kinder-palette)
 (def ^:dynamic seed-rect {:dim [0 0]})
@@ -348,22 +348,52 @@
   (let [corners (own-corner-coords rect)]
     (reduce into corners (doall (map all-corner-coords (:children rect))))))
 
+(defn dist [[ax ay] [bx by]]
+  (Math/sqrt (+ (Math/pow (- bx ax) 2)
+                (Math/pow (- by ay) 2))))
+
+(defn some-circle [rect circles]
+  (let [rad (rand-nth (range 3 6))
+        [w h] (:dim rect)
+        all-corners (all-corner-coords rect)
+        candidate-corners (->> all-corners
+                               (filter (fn [[x y]]
+                                         (and (< rad x (- w rad))
+                                              (< rad y (- h rad)))))
+                               (filter (fn [[x y]]
+                                         (not (some (fn [c]
+                                                      (>= (+ rad (:rad c))
+                                                          (dist [x y] (:loc c))))
+                                                    circles)))))]
+    (if (empty? candidate-corners)
+      []
+      [{:rad rad :loc (rand-nth candidate-corners) :color (some-accent-color)}])))
+
+
 (defn some-circles [rect]
+  (let [num-circles (rand-nth (range 3 6))]
+    (loop [circles []
+           calls 0]
+      (if (= calls num-circles)
+        circles
+        (recur (into circles
+                     (some-circle rect circles))
+               (inc calls)))))
   ;; TODO! Need to be:
   ;;  - In bounds
   ;;  - Non-overlapping, not touching
   ;;  - Sometimes plain colored
   ;;  - Possibly: in a general cluster
   ;;  - Not on 'phantom' corners (bug)
-  (let [all-corners (all-corner-coords rect)
-        num-circles (rand-nth (range 3 6))
-        selected-corners (repeatedly num-circles #(rand-nth (vec all-corners)))]
-    ;; Force immediate realization, since I'm using dynamic binding elsewhere
-    (doall
-      (map #(identity {:loc %
-                       :rad (rand-nth (range 2 6))
-                       :color (some-accent-color)})
-           selected-corners))))
+  #_(let [all-corners (all-corner-coords rect)
+          num-circles (rand-nth (range 3 6))
+          selected-corners (repeatedly num-circles #(rand-nth (vec all-corners)))]
+      ;; Force immediate realization, since I'm using dynamic binding elsewhere
+      (doall
+        (map #(identity {:loc %
+                         :rad (rand-nth (range 2 6))
+                         :color (some-accent-color)})
+             selected-corners))))
 
 (comment
   "What should the interface of this module be?

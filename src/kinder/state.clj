@@ -10,8 +10,7 @@
 
 (comment
   "TODO:
-    - Make it smooth and good-looking
-    - Decouple is-complete from circles
+    - Figure out high-res output
     - 2x2s, 3x3s should be more likely to mutate color
     - Make larger accent squares just slightly more common
     - Make the 'rand' child-gen less random, per source
@@ -60,11 +59,6 @@
     (-> {:pane pane}
         (assoc :render-depth 0))))
 
-(defn reset-state [state]
-  (init-state))
-
-(defonce state (atom (init-state)))
-
 (defn step-state [state]
   (let [{:keys [render-depth pane]} state]
     (if (= pane (core/take-depth render-depth pane))
@@ -78,8 +72,10 @@
       (update state :render-depth dec))))
 
 
+(defonce state (atom (init-state)))
+
 (defn reset []
-  (swap! state reset-state))
+  (reset! state (init-state)))
 
 (defn all-done []
   (= (:pane @state)
@@ -87,7 +83,7 @@
 
 (defn step []
   (if (all-done)
-    (swap! state reset-state)
+    (reset)
     (swap! state step-state)))
 
 (defn run []
@@ -102,13 +98,13 @@
     (swap! state back-state)
     (refresh)))
 
-(defn unit
-  ([] 10.0)
-  ([v] (* (unit) v)))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Quil
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn unit
+  ([] 10.0)
+  ([v] (* (unit) v)))
 
 (defn settings-kinder []
   (q/smooth))
@@ -146,7 +142,7 @@
                           (q/ellipse (unit x) (unit y) (unit rad) (unit rad)))))
   ;; STATS section
   (q/with-translation [20 650]
-    (when (:is-complete @state)
+    (when (all-done)
       (q/fill 0)
       (q/text-size 30)
       (q/text "DONE!" 0 0)))
@@ -179,4 +175,3 @@
 (s/check-asserts true)
 (s/assert ::state @state)
 (refresh)
-(prn (keys (:pane @state)))
