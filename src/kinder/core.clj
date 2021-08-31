@@ -5,41 +5,54 @@
   Ignorant of Quil and state.
   "
   (:refer-clojure :exclude [rand rand-int rand-nth])
-  (:require [kinder.util :as util]
-            [random-seed.core :refer [rand rand-int rand-nth set-random-seed!]]))
+  (:require [random-seed.core :refer [rand rand-int rand-nth set-random-seed!]]
+            [clojure.spec.alpha :as s]
+            [orchestra.spec.test :as st])
+  (:import (java.util Random)))
 
-(comment
-  "What should the interface of this module be?
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Spec
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  Currently it is:
-  - seed-rect
-  - with-random-children
-  - some-circles
-  - take-depth
+(s/def ::color (s/coll-of pos-int? :kind vector? :count 3))
+(s/def ::main ::color)
+(s/def ::accent (s/coll-of ::color))
+(s/def ::palette (s/keys :req-un [::main ::accent]))
 
-  Should it be:
+(s/def ::seed integer?)
 
-  (defn generate-artwork []
-    ,,,)
+;; TODO: fails if "pos-int?" !!!!!
+(s/def ::dim (s/coll-of int? :kind vector? :count 2))
+(s/def ::loc (s/coll-of int? :kind vector? :count 2))
+(s/def ::assigned-color ::color)
+(s/def ::children (s/coll-of ::rect))
+(s/def ::rect (s/keys :req-un [::dim ::loc ::color ::assigned-color]
+                      :opt-un [::children]))
 
-  Here, the client would have no ability to dictate a color palette,
-  or a set of color palettes to draw from, or a seed, or the dimensions
-  of the piece. Hmmm.
+(s/def ::rad pos-int?)
+(s/def ::circle (s/keys :req-un [::loc ::rad ::color]))
+(s/def ::circles (s/coll-of ::circle))
 
-  If this module is an artist accepting commissions -- what parameters
-  would this opinionated artist accept? Maybe:
-  - Dimensions
-  - Optionally: seed
-  - Optionally: any configurable parameters, e.g. palette selection.
-    Useful e.g. for generating a triptych that demonstrates something,
-    e.g. all with the same palette, or with ascending entropy, etc.
-  ")
+(s/def ::pane (s/keys :req-un [::rect ::seed ::dim ::circles]))
 
-(defn generate-artwork [dimensions & opts]
-  "Outputs a kinder-symphony work. Demands only dimensions for
-  the piece; "
-  (let [[width height] dimensions
-        {:keys [seed palette]} opts]))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Util
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn divisors [n]
+  (->> (range 1 (inc n))
+       (filter #(zero? (rem n %)))))
+
+(defn weighted-selection [pairs]
+  (let [total (reduce + (map second pairs))
+        r (rand-int total)]
+    (reduce (fn [acc [v n]]
+              (let [acc' (+ acc n)]
+                (if (< r acc')
+                  (reduced v)
+                  acc')))
+            0
+            pairs)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Config
@@ -52,21 +65,19 @@
                               [35, 77, 91]]})
                               ;[0, 100, 0]]})
 
-(def palette kinder-palette)
+(def red-palette {:main [57, 8, 93]
+                  :accent [[354, 99, 64]]})
+
+(def palettes [kinder-palette red-palette])
+
+(def ^:dynamic palette kinder-palette)
+(def ^:dynamic seed-rect {:dim [0 0]})
 
 (defn- main-color []
   (:main palette))
 
 (defn- some-accent-color []
   (rand-nth (:accent palette)))
-
-(def seed-rect {:dim [30 60]
-                :loc [0 0]
-                ;:assigned-color (some-accent-color)
-                :assigned-color (first (:accent palette))
-                :color (main-color)
-                :id ""
-                :children []})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Coloring
@@ -77,11 +88,11 @@
         [w h] dim
         color (cond
                 (or (> w 3) (> h 3))
-                (util/weighted-selection [[parent-color 1]
-                                          [(some-accent-color) 10]])
+                (weighted-selection [[parent-color 1]
+                                     [(some-accent-color) 10]])
                 :else
-                (util/weighted-selection [[parent-color 10]
-                                          [(some-accent-color) 1]]))]
+                (weighted-selection [[parent-color 10]
+                                     [(some-accent-color) 1]]))]
     (assoc rect :assigned-color color)))
 
 (defn- express-some-color [rect]
@@ -100,12 +111,12 @@
         id-indicates-color (= (mod id-a 2) (mod id-b 2))
         color (cond
                 (not is-square) main
-                is-large (util/weighted-selection [[main 10]
-                                                   [accent 3]])
-                id-indicates-color (util/weighted-selection [[accent 10]
-                                                             [main 1]])
-                :else (util/weighted-selection [[main 10]
-                                                [accent 1]]))]
+                is-large (weighted-selection [[main 10]
+                                              [accent 3]])
+                id-indicates-color (weighted-selection [[accent 10]
+                                                        [main 1]])
+                :else (weighted-selection [[main 10]
+                                           [accent 1]]))]
     (assoc rect :color color)))
 
 (defn- assign-and-express-color [rect parent-color]
@@ -123,21 +134,22 @@
                                  (update :loc reversev)))]
     (fn [rect]
       (let [children (-> rect flip-axes child-bearer-f)]
-        (mapv flip-axes children)))))
+        (doall (mapv flip-axes children))))))
 
 (defn- horz-even-children [rect]
   (let [{:keys [dim loc assigned-color id]} rect
         [w h] dim
         [x y] loc
-        divs (util/divisors h)
-        div (util/weighted-selection (mapv #(vector %1 %2)
-                                           divs
-                                           (range (count divs) 0 -1)))]
+        divs (divisors h)
+        div (weighted-selection (mapv #(vector %1 %2)
+                                      divs
+                                      (range (count divs) 0 -1)))]
     (->> (range y (+ y h) div)
          (map-indexed #(assign-and-express-color {:dim [w div]
                                                   :loc    [x %2]
                                                   :id (str id %1)}
-                                                 assigned-color)))))
+                                                 assigned-color))
+         (doall))))
 (def vert-even-children (flip-axes horz-even-children))
 
 (defn- horz-sym-children [rect]
@@ -152,7 +164,8 @@
           {:loc [x (+ y'a h')] :dim [w (- h h' h')]}
           (assoc r :loc [x y'b])]
          (map-indexed #(assoc %2 :id (str id %1)))
-         (mapv #(assign-and-express-color % assigned-color)))))
+         (mapv #(assign-and-express-color % assigned-color))
+         (doall))))
 
 (def vert-sym-children (flip-axes horz-sym-children))
 
@@ -163,18 +176,20 @@
         num-kids (+ 2 (rand-int 4))
         ranges (->> (repeatedly #(rand-nth (map inc (range y (+ y h)))))
                     (take num-kids)
+                    (doall)
                     (sort)
                     (cons y)
                     (vec))
         ranges (->> (conj ranges (+ y h))
                     (partition 2 1)
                     (map vec))
-        rs (map-indexed (fn [i [ya yb]]
-                          (assign-and-express-color {:dim [w (- yb ya)]
-                                                     :loc    [x ya]
-                                                     :id (str id i)}
-                                                    assigned-color))
-                        ranges)]
+        rs (doall
+             (map-indexed (fn [i [ya yb]]
+                            (assign-and-express-color {:dim [w (- yb ya)]
+                                                       :loc    [x ya]
+                                                       :id (str id i)}
+                                                      assigned-color))
+                          ranges))]
     rs))
 (def vert-rand-children (flip-axes horz-rand-children))
 
@@ -209,46 +224,46 @@
 
           f (cond
               is-seed-rect
-              (util/weighted-selection [[sym 1]])
+              (weighted-selection [[sym 1]])
 
               is-very-big
-              (util/weighted-selection [[sym 6]
-                                        [rand 3]])
+              (weighted-selection [[sym 6]
+                                   [rand 3]])
 
               is-pretty-big
-              (util/weighted-selection [[sym 6]
-                                        [rand 3]
-                                        [(constantly []) 4]])
+              (weighted-selection [[sym 6]
+                                   [rand 3]
+                                   [(constantly []) 4]])
 
               is-long-and-maximally-skinny
-              (util/weighted-selection [[even 10]
-                                        [rand 10]
-                                        [(constantly []) 10]])
+              (weighted-selection [[even 10]
+                                   [rand 10]
+                                   [(constantly []) 10]])
 
               is-maximally-skinny
-              (util/weighted-selection [[even 10]
-                                        ;[even 10]
-                                        ;[rand 10]
-                                        [(constantly []) 4]])
+              (weighted-selection [[even 10]
+                                   ;[even 10]
+                                   ;[rand 10]
+                                   [(constantly []) 4]])
 
               ;is-short-and-skinny
               is-skinny ;; TODO tweak me
-              (util/weighted-selection [[even 10]
-                                        ;[even 10]
-                                        ;[rand 10]
-                                        [(constantly []) 6]])
+              (weighted-selection [[even 10]
+                                   ;[even 10]
+                                   ;[rand 10]
+                                   [(constantly []) 6]])
 
               is-pretty-small
-              (util/weighted-selection [[even 2]
-                                        [rand 1]
-                                        [sym 1]
-                                        [(constantly []) 10]])
+              (weighted-selection [[even 2]
+                                   [rand 1]
+                                   [sym 1]
+                                   [(constantly []) 10]])
 
               :else
-              (util/weighted-selection [[sym 4]
-                                        [rand 8]
-                                        [even 2]
-                                        [(constantly []) 10]]))
+              (weighted-selection [[sym 4]
+                                   [rand 8]
+                                   [even 2]
+                                   [(constantly []) 10]]))
           children (f rect)]
       children)))
 
@@ -267,29 +282,53 @@
       (and (<= w 1) (<= h 1)) []
       (<= w 1) (horz-children rect)
       (<= h 1) (vert-children rect)
-      is-vert (util/weighted-selection [[(horz-children rect) 10]
-                                        [(vert-children rect) 1]])
-      :else (util/weighted-selection [[(horz-children rect) 1]
-                                      [(vert-children rect) 10]]))))
+      is-vert (weighted-selection [[(horz-children rect) 10]
+                                   [(vert-children rect) 1]])
+      :else (weighted-selection [[(horz-children rect) 1]
+                                 [(vert-children rect) 10]]))))
 
 (defn- with-some-direct-children [rect]
   (let [children (make-direct-children rect)]
     (assoc rect :children children)))
 
-(defn take-depth [depth rect]
+
+(defn take-rect-depth [depth rect]
   (if (zero? depth)
     (if (:children rect)
       (assoc rect :children [])
       rect)
     (if (:children rect)
-      (update rect :children (partial map #(take-depth (dec depth) %)))
+      (-> rect
+          (update :children (partial map #(take-rect-depth (dec depth) %)))
+          (update :children doall))
       rect)))
+
+(defn take-depth [depth pane]
+  (let [{:keys [rect circles]} pane
+        rect' (take-rect-depth depth rect)
+        circles' (if (= rect (take-rect-depth depth rect))
+                   circles
+                   [])]
+    (-> pane
+        (assoc :rect rect')
+        (assoc :circles circles'))))
 
 (defn with-random-children [rect]
   (-> rect
       (with-some-direct-children)
-      (update :children (partial map #(with-random-children %)))))
+      (update :children (partial map #(with-random-children %)))
+      (update :children doall)))
 
+(defn some-rect [dimensions]
+  (let [accent (some-accent-color)
+        main (main-color)]
+    (-> (with-random-children {:dim            dimensions
+                               :loc            [0 0]
+                               :assigned-color accent
+                               :color          main
+                               :id             ""
+                               :children       []})
+        (update :children doall))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Circles
@@ -307,7 +346,7 @@
 
 (defn- all-corner-coords [rect]
   (let [corners (own-corner-coords rect)]
-    (reduce into corners (map all-corner-coords (:children rect)))))
+    (reduce into corners (doall (map all-corner-coords (:children rect))))))
 
 (defn some-circles [rect]
   ;; TODO! Need to be:
@@ -319,7 +358,60 @@
   (let [all-corners (all-corner-coords rect)
         num-circles (rand-nth (range 3 6))
         selected-corners (repeatedly num-circles #(rand-nth (vec all-corners)))]
-    (map #(identity {:loc %
-                     :rad (rand-nth (range 2 6))
-                     :color (some-accent-color)})
-         selected-corners)))
+    ;; Force immediate realization, since I'm using dynamic binding elsewhere
+    (doall
+      (map #(identity {:loc %
+                       :rad (rand-nth (range 2 6))
+                       :color (some-accent-color)})
+           selected-corners))))
+
+(comment
+  "What should the interface of this module be?
+
+  Currently it is:
+  - seed-rect
+  - with-random-children
+  - some-circles
+  - take-depth
+
+  Should it be:
+
+  (defn generate-artwork []
+    ,,,)
+
+  Here, the client would have no ability to dictate a color palette,
+  or a set of color palettes to draw from, or a seed, or the dimensions
+  of the piece. Hmmm.
+
+  If this module is an artist accepting commissions -- what parameters
+  would this opinionated artist accept? Maybe:
+  - Dimensions
+  - Optionally: seed
+  - Optionally: any configurable parameters, e.g. palette selection.
+    Useful e.g. for generating a triptych that demonstrates something,
+    e.g. all with the same palette, or with ascending entropy, etc.
+  ")
+
+(s/fdef generate-pane
+  :args (s/cat :dimensions ::dim :opts (s/keys* :opt-un [::seed ::palette]))
+  :ret ::pane)
+(defn generate-pane [dimensions & {:keys [seed palette]}]
+  "Outputs a kinder-symphony work. Demands dimensions in the form
+   of [w h] -- we refuse to generate random dimensions.
+   Other parameters are optional.
+   "
+  (let [seed (or seed (-> (Random.) .nextLong))
+        _ (set-random-seed! seed)
+        ;; Always select a palette, so that seed is deterministic
+        default-palette (rand-nth palettes)
+        palette (or palette default-palette)]
+    (binding [palette palette
+              seed-rect {:dim dimensions}]
+      (let [rect (some-rect dimensions)
+            circles (some-circles rect)]
+        {:rect    rect
+         :circles circles
+         :seed    seed
+         :dim     dimensions}))))
+
+(st/instrument)

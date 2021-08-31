@@ -1,13 +1,12 @@
 (ns kinder.state
-  (:refer-clojure :exclude [rand rand-int rand-nth])
   (:require [kinder.core :as core]
             [quil.core :as q]
             [clojure.walk :as walk]
-            [random-seed.core :refer [rand rand-int rand-nth set-random-seed!]]
+            [clojure.spec.alpha :as s]
+            [orchestra.spec.test :as st]
             [clojure.java.shell :refer [sh]]
             [clojure.string :as str])
-  (:import (java.time LocalDateTime)
-           (java.util Random)))
+  (:import (java.time LocalDateTime)))
 
 (comment
   "TODO:
@@ -53,16 +52,13 @@
       less likely for even-gen.
   ")
 
+(s/def ::render-depth (s/and int? (complement neg?)))
+(s/def ::state (s/keys :req-un [::core/pane ::render-depth]))
+
 (defn init-state []
-  (let [seed (-> (Random.) .nextLong)
-        _ (set-random-seed! seed)
-        root-rect (core/with-random-children core/seed-rect)
-        circles (core/some-circles root-rect)]
-    {:seed seed
-     :depth-to-realize 0
-     :root-rect root-rect
-     :render-rect core/seed-rect
-     :circles circles}))
+  (let [pane (core/generate-pane [30 60])]
+    (-> {:pane pane}
+        (assoc :render-depth 0))))
 
 (defn reset-state [state]
   (init-state))
@@ -70,43 +66,33 @@
 (defonce state (atom (init-state)))
 
 (defn step-state [state]
-  (let [{:keys [depth-to-realize root-rect is-complete]} state]
-    (if is-complete
+  (let [{:keys [render-depth pane]} state]
+    (if (= pane (core/take-depth render-depth pane))
       state
-      (let [depth-to-realize' (inc depth-to-realize)
-            render-rect' (core/take-depth depth-to-realize' root-rect)
-            is-complete (= render-rect' (core/take-depth (inc depth-to-realize') root-rect))]
-        (-> state
-            (assoc :depth-to-realize depth-to-realize')
-            (assoc :render-rect render-rect')
-            (assoc :is-complete is-complete))))))
+      (update state :render-depth inc))))
 
 (defn back-state [state]
-  (let [{:keys [depth-to-realize root-rect render-rect]} state]
-    (if (= render-rect core/seed-rect)
-      (do
-        (prn "here")
-        state)
-      (let [depth-to-realize' (dec depth-to-realize)
-            render-rect' (core/take-depth depth-to-realize' root-rect)]
-        (prn "here")
-        (-> state
-            (assoc :depth-to-realize depth-to-realize')
-            (assoc :render-rect render-rect')
-            (assoc :is-complete false))))))
+  (let [{:keys [render-depth]} state]
+    (if (= render-depth 0)
+      state
+      (update state :render-depth dec))))
 
 
 (defn reset []
   (swap! state reset-state))
 
+(defn all-done []
+  (= (:pane @state)
+     (core/take-depth (:render-depth @state) (:pane @state))))
+
 (defn step []
-  (if (:is-complete @state)
+  (if (all-done)
     (swap! state reset-state)
     (swap! state step-state)))
 
 (defn run []
   (reset)
-  (while (not (:is-complete @state))
+  (while (not (all-done))
    (step)))
 
 (run)
@@ -150,13 +136,14 @@
                                 (q/text id (+ (unit x))
                                            (+ (unit y) (/ (unit h) 2))))
                             children))
-                        (:render-rect @state))
-                      (when (:is-complete @state)
-                        (doseq [circle (:circles @state)]
-                          (let [{:keys [loc rad color]} circle
-                                [x y] loc]
-                            (q/fill color)
-                            (q/ellipse (unit x) (unit y) (unit rad) (unit rad))))))
+                        (:rect (core/take-depth (:render-depth @state)
+                                                (:pane @state))))
+                      (doseq [circle (:circles (core/take-depth (:render-depth @state)
+                                                                (:pane @state)))]
+                        (let [{:keys [loc rad color]} circle
+                              [x y] loc]
+                          (q/fill color)
+                          (q/ellipse (unit x) (unit y) (unit rad) (unit rad)))))
   ;; STATS section
   (q/with-translation [20 650]
     (when (:is-complete @state)
@@ -188,4 +175,8 @@
 (defn refresh []
   (.loop kinder))
 
+(st/instrument)
+(s/check-asserts true)
+(s/assert ::state @state)
 (refresh)
+(prn (keys (:pane @state)))
