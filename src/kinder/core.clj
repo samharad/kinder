@@ -23,7 +23,7 @@
 
 ;; TODO: fails if "pos-int?" !!!!!
 (s/def ::dim (s/coll-of int? :kind vector? :count 2))
-(s/def ::loc (s/coll-of int? :kind vector? :count 2))
+(s/def ::loc (s/coll-of number? :kind vector? :count 2))
 (s/def ::assigned-color ::color)
 (s/def ::children (s/coll-of ::rect))
 (s/def ::rect (s/keys :req-un [::dim ::loc ::color ::assigned-color]
@@ -356,18 +356,22 @@
   (let [rad (rand-nth (range 3 6))
         [w h] (:dim rect)
         all-corners (all-corner-coords rect)
-        candidate-corners (->> all-corners
-                               (filter (fn [[x y]]
-                                         (and (< rad x (- w rad))
-                                              (< rad y (- h rad)))))
-                               (filter (fn [[x y]]
-                                         (not (some (fn [c]
-                                                      (>= (+ rad (:rad c))
-                                                          (dist [x y] (:loc c))))
-                                                    circles)))))]
-    (if (empty? candidate-corners)
+        candidate-spots (map (fn [[x y]]
+                               (let [jit #(rand-nth (range -1 2 0.1))]
+                                 [(+ x (jit)) (+ y (jit))]))
+                             all-corners)
+        candidate-spots (->> candidate-spots
+                             (filter (fn [[x y]]
+                                       (and (< rad x (- w rad))
+                                            (< rad y (- h rad)))))
+                             (filter (fn [[x y]]
+                                       (not (some (fn [c]
+                                                    (>= (+ rad (:rad c))
+                                                        (dist [x y] (:loc c))))
+                                                  circles)))))]
+    (if (empty? candidate-spots)
       []
-      [{:rad rad :loc (rand-nth candidate-corners) :color (some-accent-color)}])))
+      [{:rad rad :loc (rand-nth candidate-spots) :color (some-accent-color)}])))
 
 
 (defn some-circles [rect]
@@ -375,6 +379,7 @@
   ;;  - Sometimes plain colored
   ;;  - Possibly: in a general cluster
   ;;  - Not on 'phantom' corners (bug)
+  ;;  - Jitter-biased to the corner itself?
   (let [num-circles (rand-nth (range 3 5))]
     (loop [circles []
            calls 0]

@@ -51,6 +51,22 @@
       less likely for even-gen.
   ")
 
+(defn code-header [s]
+  (let [this-file *file*]
+    (when this-file
+      (let [contents (slurp this-file)
+            updated (str/replace contents
+                                 (str "(code-header " s ")")
+                                 (str ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;"
+                                      \newline
+                                      s
+                                      \newline
+                                      ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;"))]
+        (spit this-file updated)))))
+
+
+(code-header "a")
+
 (s/def ::render-depth (s/and int? (complement neg?)))
 (s/def ::state (s/keys :req-un [::core/pane ::render-depth]))
 
@@ -91,12 +107,6 @@
   (while (not (all-done))
    (step)))
 
-(run)
-(declare refresh)
-(comment
-  (do
-    (swap! state back-state)
-    (refresh)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Quil
@@ -152,7 +162,7 @@
                        :out
                        (str/trim)
                        (str/replace " " "-"))]
-    (q/save (str "output/large/"
+    (q/save (str "output/wip/"
                  (.toString (LocalDateTime/now))
                  "_"
                  (:seed @state)
@@ -177,7 +187,16 @@
 (st/instrument)
 (s/check-asserts true)
 (s/assert ::state @state)
-(refresh)
+
+;; DEV
+(do
+  (run)
+  (declare refresh)
+  (comment
+    (do
+      (swap! state back-state)
+      (refresh)))
+  (refresh))
 
 (defn -main [& args]
   (println "Rendering...")
