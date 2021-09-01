@@ -56,16 +56,15 @@
     (when this-file
       (let [contents (slurp this-file)
             updated (str/replace contents
-                                 (str "(code-header " s ")")
+                                 (str "(code-header \"" s "\")")
                                  (str ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;"
                                       \newline
-                                      s
+                                      ";; " s
                                       \newline
                                       ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;"))]
-        (spit this-file updated)))))
-
-
-(code-header "a")
+        (spit this-file updated)
+        (sh "osascript" "-e" "activate application \"Finder\"")
+        (sh "osascript" "-e" "activate application \"IntelliJ IDEA\"")))))
 
 (s/def ::render-depth (s/and int? (complement neg?)))
 (s/def ::state (s/keys :req-un [::core/pane ::render-depth]))
