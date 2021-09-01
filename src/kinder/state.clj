@@ -110,11 +110,13 @@
   (q/smooth))
 (defn setup-kinder [])
 (defn draw-kinder []
+  (println (str "Display: " (System/getProperty "DISPLAY")))
   (q/no-loop)
   (q/color-mode :hsb 360 100 100 1.0)
   (q/background 360 0 100)
-  (q/stroke-weight 3)
-  (q/with-translation [20 20]
+  (q/stroke-weight (/ (unit 3)
+                      10))
+  (q/with-translation [(unit 2) (unit 2)]
                       (walk/prewalk
                         (fn [rect]
                           (let [{:keys [dim loc children color id]} rect
@@ -141,22 +143,23 @@
                           (q/fill color)
                           (q/ellipse (unit x) (unit y) (unit rad) (unit rad)))))
   ;; STATS section
-  (q/with-translation [20 650]
-    (when (all-done)
-      (q/fill 0)
-      (q/text-size 30)
-      (q/text "DONE!" 0 0)))
+  #_(q/with-translation [20 650]
+      (when (all-done)
+        (q/fill 0)
+        (q/text-size 30)
+        (q/text "DONE!" 0 0)))
   (let [commit-msg (-> (sh "git" "log" "-1" "--pretty=%s")
                        :out
                        (str/trim)
                        (str/replace " " "-"))]
-    (q/save (str "output/wip/"
+    (q/save (str "output/large/"
                  (.toString (LocalDateTime/now))
                  "_"
                  (:seed @state)
                  "_"
                  commit-msg
                  ".tif"))))
+
 
 
 (comment
@@ -175,3 +178,13 @@
 (s/check-asserts true)
 (s/assert ::state @state)
 (refresh)
+
+(defn -main [& args]
+  (println "Rendering...")
+  (q/sketch :title "Kinder-Big"
+            :setup kinder.state/setup-kinder
+            :settings kinder.state/settings-kinder
+            :draw kinder.state/draw-kinder
+            :features [:exit-on-close]
+            :size [400 700])
+  (println "Done!"))
