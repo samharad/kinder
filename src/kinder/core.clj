@@ -98,7 +98,7 @@
 (defn- express-some-color [rect]
   (let [{:keys [dim id assigned-color]} rect
         [w h] dim
-        is-large (or (> w 3) (> h 3))
+        is-large (or (> w 4) (> h 4))
         accent assigned-color
         main (main-color)
         is-square (= w h)
@@ -221,10 +221,17 @@
           is-long-and-maximally-skinny (and is-maximally-skinny
                                             (or (> w 10) (> h 10)))
           ;is-short (or (<= w 10) (<= h 10))
+          is-square (= w h)
 
           f (cond
               is-seed-rect
               (weighted-selection [[sym 1]])
+
+              (and is-square (> w 6) (> h 6))
+              (weighted-selection [[(constantly []) 4]
+                                   [sym 1]
+                                   [rand 1]
+                                   [even 1]])
 
               is-very-big
               (weighted-selection [[sym 6]

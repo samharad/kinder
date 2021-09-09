@@ -16,24 +16,22 @@
       Need to think about boundaries more.
   ")
 
-#_(defn unit
-    ([] 10.0)
-    ([v] (* (unit) v)))
-
 (defn setup []
   (q/smooth))
 
 (defn draw [state & {:as opts}]
+  ;(q/scale 0.5)
   (let [u (or (:unit opts) 10)
+        stroke-weight (or (:stroke-weight opts) 3/10)
         unit (fn unit
                ([] u)
-               ([v] (* v (unit))))]
+               ([v] (* v (unit))))
+        stroke-weight (unit stroke-weight)]
     (q/no-loop)
     (q/color-mode :hsb 360 100 100 1.0)
     (q/background 360 0 100)
-    (q/stroke-weight (/ (unit 3)
-                        10))
-    (q/with-translation [(unit 2) (unit 2)]
+    (q/stroke-weight stroke-weight)
+    (q/with-translation [(/ stroke-weight 2) (/ stroke-weight 2)]
                         (walk/prewalk
                           (fn [rect]
                             (let [{:keys [dim loc children color id]} rect
