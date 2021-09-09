@@ -5,17 +5,23 @@
             [orchestra.spec.test :as spect]
             [quil.core :as q]))
 
-(defonce state (atom (st/init-state [30 60])))
+(def dim [30 60])
+(def unit 10)
 
-(def draw (partial draw/draw state))
+(defonce state (atom (st/init-state dim)))
 
-(defonce kinder (q/sketch
-                  :title "Kinder"
-                  :setup (constantly nil)
-                  :settings (constantly nil)
-                  :draw kinder.dev/draw
-                  :features [:keep-on-top :resizable]
-                  :size [400 700]))
+(defn draw [] (draw/draw state :unit unit))
+
+(defn sketch []
+  (q/sketch
+    :title "Kinder"
+    :setup #'kinder.draw/setup
+    :settings (constantly nil)
+    :draw #'kinder.dev/draw
+    :features [:keep-on-top]
+    :size [(* unit 40) (* unit 70)]))
+
+(defonce kinder (sketch))
 
 (defn refresh []
   (.loop kinder))
@@ -31,7 +37,9 @@
 
   (do
     (st/step! state)
-    (refresh)))
+    (refresh))
+
+  (def kinder (sketch)))
 
 (spect/instrument)
 (spec/check-asserts true)

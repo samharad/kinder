@@ -7,7 +7,7 @@
 
 (defonce state (atom (st/init-state [30 60])))
 (st/complete! state)
-(def draw (partial draw/draw state))
+(def draw #(draw/draw state :unit 50))
 
 (defn -main [& args]
   (println "Rendering...")
@@ -15,7 +15,7 @@
             :setup (constantly nil)
             :settings (constantly nil)
             :draw kinder.render/draw
-            :features [:exit-on-close]
+            ;:features [:exit-on-close]
             :size [400 700])
   (println "Done!"))
 
