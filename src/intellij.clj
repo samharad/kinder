@@ -1,4 +1,4 @@
-(ns kinder.intellij
+(ns intellij
   (:require [tubular.core :as tubular]
             [clojure.java.io :refer [reader]]
             [clojure.core.server :as server]

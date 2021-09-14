@@ -6,11 +6,9 @@
 
 (comment
   "TODO:
-    - Figure out high-res output
     - 2x2s, 3x3s should be more likely to mutate color
     - Make larger accent squares just slightly more common
     - Make the 'rand' child-gen less random, per source
-    - Find a happy stroke weight (currently needs to be an odd #)
     - I know why the checkering is inconsistent. It's because a box
       might first divide evenly into stripes, then each of those may
       divide randomly, then checker.

@@ -2,6 +2,11 @@
   "Mostly-pure functions that output and manipulate data representing
   a generative artwork image.
 
+  The current approach to pseudo-randomness is to use the `random-seed`
+  library, which introduces a `set-random-seed!` function and rand-x
+  functions which use that seed. A better approach, in the future, might
+  be to explicitly pass around an RNG.
+
   Ignorant of Quil and state.
   "
   (:refer-clojure :exclude [rand rand-int rand-nth])
@@ -14,13 +19,14 @@
 ;; Spec
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(s/def ::color (s/coll-of pos-int? :kind vector? :count 3))
+(s/def ::color (s/coll-of int? :kind vector? :count 3))
 (s/def ::main ::color)
 (s/def ::accent (s/coll-of ::color))
 (s/def ::palette (s/keys :req-un [::main ::accent]))
 
 (s/def ::seed integer?)
 
+(s/def ::radius number?)
 ;; TODO: fails if "pos-int?" !!!!!
 (s/def ::dim (s/coll-of int? :kind vector? :count 2))
 (s/def ::loc (s/coll-of number? :kind vector? :count 2))
@@ -68,7 +74,15 @@
 (def red-palette {:main [57, 8, 93]
                   :accent [[354, 99, 64]]})
 
-(def palettes [kinder-palette #_red-palette])
+(def orange-palette {:main [46 27 85]
+                     :accent [[32 94 99]
+                              [174 15 25]
+                              [150 5 17]
+                              [204 5 78]]})
+
+(def palettes [kinder-palette
+               red-palette
+               orange-palette])
 
 (def ^:dynamic palette kinder-palette)
 (def ^:dynamic seed-rect {:dim [0 0]})
@@ -272,7 +286,8 @@
                                    [even 2]
                                    [(constantly []) 10]]))
           children (f rect)]
-      children)))
+      (map #(assoc % :radius 2)
+           children))))
 
 (def horz-children (children horz-sym-children
                              horz-rand-children
@@ -330,6 +345,7 @@
   (let [accent (some-accent-color)
         main (main-color)]
     (-> (with-random-children {:dim            dimensions
+                               :radius         0
                                :loc            [0 0]
                                :assigned-color accent
                                :color          main
@@ -368,9 +384,9 @@
                                  [(+ x (jit)) (+ y (jit))]))
                              all-corners)
         candidate-spots (->> candidate-spots
-                             (filter (fn [[x y]]
-                                       (and (< rad x (- w rad))
-                                            (< rad y (- h rad)))))
+                             #_(filter (fn [[x y]]
+                                         (and (< rad x (- w rad))
+                                              (< rad y (- h rad)))))
                              (filter (fn [[x y]]
                                        (not (some (fn [c]
                                                     (>= (+ rad (:rad c))
@@ -396,33 +412,6 @@
                      (some-circle rect circles))
                (inc calls))))))
 
-(comment
-  "What should the interface of this module be?
-
-  Currently it is:
-  - seed-rect
-  - with-random-children
-  - some-circles
-  - take-depth
-
-  Should it be:
-
-  (defn generate-artwork []
-    ,,,)
-
-  Here, the client would have no ability to dictate a color palette,
-  or a set of color palettes to draw from, or a seed, or the dimensions
-  of the piece. Hmmm.
-
-  If this module is an artist accepting commissions -- what parameters
-  would this opinionated artist accept? Maybe:
-  - Dimensions
-  - Optionally: seed
-  - Optionally: any configurable parameters, e.g. palette selection.
-    Useful e.g. for generating a triptych that demonstrates something,
-    e.g. all with the same palette, or with ascending entropy, etc.
-  ")
-
 (s/fdef generate-pane
   :args (s/cat :dimensions ::dim :opts (s/keys* :opt-un [::seed ::palette]))
   :ret ::pane)
@@ -437,7 +426,7 @@
         default-palette (rand-nth palettes)
         palette (or palette default-palette)]
     (binding [palette palette
-              seed-rect {:dim dimensions}]
+              seed-rect {:dim dimensions :radius 0}]
       (let [rect (some-rect dimensions)
             circles (some-circles rect)]
         {:rect    rect
