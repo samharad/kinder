@@ -54,6 +54,8 @@
                                 [x y] loc]
                             (q/fill color)
                             (q/ellipse (unit x) (unit y) (unit rad) (unit rad))))
+                        ;; Draw a transparent outermost box, so that only the edge stroke is
+                        ;; drawn, so that out-of-frame circles don't wreck the edge.
                         (q/fill 0 0)
                         (let [{:keys [dim loc radius]} rect
                               [x y] loc

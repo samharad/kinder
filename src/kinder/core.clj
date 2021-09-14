@@ -28,7 +28,7 @@
 
 (s/def ::radius number?)
 ;; TODO: fails if "pos-int?" !!!!!
-(s/def ::dim (s/coll-of int? :kind vector? :count 2))
+(s/def ::dim (s/coll-of number? :kind vector? :count 2))
 (s/def ::loc (s/coll-of number? :kind vector? :count 2))
 (s/def ::assigned-color ::color)
 (s/def ::children (s/coll-of ::rect))
@@ -81,7 +81,7 @@
                               [204 5 78]]})
 
 (def palettes [kinder-palette
-               red-palette
+               #_red-palette
                orange-palette])
 
 (def ^:dynamic palette kinder-palette)
@@ -143,9 +143,12 @@
 
 (defn- flip-axes [child-bearer-f]
   (let [reversev (comp vec reverse)
-        flip-axes (fn [rect] (-> rect
-                                 (update :dim reversev)
-                                 (update :loc reversev)))]
+        flip-axes (fn flip-axes [rect] (-> rect
+                                           (update :dim reversev)
+                                           (update :loc reversev)
+                                           (update :children #(if (not-empty %)
+                                                                (map flip-axes %)
+                                                                %))))]
     (fn [rect]
       (let [children (-> rect flip-axes child-bearer-f)]
         (doall (mapv flip-axes children))))))
@@ -183,6 +186,36 @@
 
 (def vert-sym-children (flip-axes horz-sym-children))
 
+(defn- horz-stripe-sem-children
+  "Bastard function -- renders not one but two 'levels' of children!
+  Furthermore, it breaks some squares down to half-unit!
+
+  Asserts that the rect is 1 unit wide!
+  "
+  [rect]
+  {:pre [(= 1 (first (:dim rect)))]}
+  (let [odd-or-even (rand-int 2)
+        children (->> (horz-even-children rect)
+                      (map (fn more-children [rect]
+                             (let [{:keys [id dim loc assigned-color]} rect
+                                   [w h] dim
+                                   [x y] loc
+                                   should-probably-split (= odd-or-even (mod (Integer/parseInt (str (last id)))
+                                                                             2))
+                                   should-split (and should-probably-split (not= 0 (rand-int 8)))
+                                   children (if should-split
+                                              (mapv #(assign-and-express-color % assigned-color)
+                                                    [{:dim [(* 0.5 w) h]
+                                                      :loc [x y]
+                                                      :id (str id "0")}
+                                                     {:dim [(* 0.5 w) h]
+                                                      :loc [(+ x (* 0.5 w)) y]
+                                                      :id (str id "1")}])
+                                              [])]
+                               (assoc rect :children children)))))]
+    children))
+(def vert-stripe-sem-children (flip-axes horz-stripe-sem-children))
+
 (defn- horz-rand-children [rect]
   (let [{:keys [dim loc assigned-color id]} rect
         [w h] dim
@@ -207,7 +240,7 @@
     rs))
 (def vert-rand-children (flip-axes horz-rand-children))
 
-(defn- children [sym rand even]
+(defn- children [sym rand even stripe-sem]
   (fn [rect]
     (let [{:keys [dim]} rect
           [w h] dim
@@ -238,6 +271,9 @@
           is-square (= w h)
 
           f (cond
+              (and (<= w 1) (<= h 1))
+              (constantly [])
+
               is-seed-rect
               (weighted-selection [[sym 1]])
 
@@ -259,7 +295,8 @@
               is-long-and-maximally-skinny
               (weighted-selection [[even 10]
                                    [rand 10]
-                                   [(constantly []) 10]])
+                                   [(constantly []) 10]
+                                   [stripe-sem 20]])
 
               is-maximally-skinny
               (weighted-selection [[even 10]
@@ -291,17 +328,19 @@
 
 (def horz-children (children horz-sym-children
                              horz-rand-children
-                             horz-even-children))
+                             horz-even-children
+                             horz-stripe-sem-children))
 
 (def vert-children (children vert-sym-children
                              vert-rand-children
-                             vert-even-children))
+                             vert-even-children
+                             vert-stripe-sem-children))
 
 (defn- make-direct-children [rect]
   (let [[w h] (:dim rect)
         is-vert (> h w)]
     (cond
-      (and (<= w 1) (<= h 1)) []
+      (and (<= w 1) (<= h 1)) (or (:children rect) [])
       (<= w 1) (horz-children rect)
       (<= h 1) (vert-children rect)
       is-vert (weighted-selection [[(horz-children rect) 10]
