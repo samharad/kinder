@@ -82,7 +82,7 @@
 
 (def palettes [kinder-palette
                #_red-palette
-               orange-palette])
+               #_orange-palette])
 
 (def ^:dynamic palette kinder-palette)
 (def ^:dynamic seed-rect {:dim [0 0]})
@@ -202,7 +202,8 @@
                                    [x y] loc
                                    should-probably-split (= odd-or-even (mod (Integer/parseInt (str (last id)))
                                                                              2))
-                                   should-split (and should-probably-split (not= 0 (rand-int 8)))
+                                   should-split (or (and should-probably-split (not= 0 (rand-int 4)))
+                                                    (= 0 (rand-int 10)))
                                    children (if should-split
                                               (mapv #(assign-and-express-color % assigned-color)
                                                     [{:dim [(* 0.5 w) h]
@@ -415,7 +416,7 @@
                 (Math/pow (- by ay) 2))))
 
 (defn some-circle [rect circles]
-  (let [rad (rand-nth (range 3 6))
+  (let [rad (rand-nth (range 3 10))
         [w h] (:dim rect)
         all-corners (all-corner-coords rect)
         candidate-spots (map (fn [[x y]]
