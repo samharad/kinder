@@ -3,3 +3,4 @@ output/
 .nrepl-port
 *.iml
 .cpcache/
+.DS_store
