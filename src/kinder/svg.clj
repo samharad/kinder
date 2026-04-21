@@ -48,11 +48,29 @@
             (hsb->hex color)
             (float sw))))
 
+(defn- curve-el
+  "Dev overlay: renders :curve-points as a faint dashed polyline so the
+  coordinated-circles curve is visible. Returns nil when points is empty
+  or missing."
+  [points unit sw]
+  (when (seq points)
+    (let [pts (str/join " "
+                (for [[x y] points]
+                  (format "%.2f,%.2f" (float (* x unit)) (float (* y unit)))))]
+      (format "<polyline points=\"%s\" fill=\"none\" stroke=\"#888\" stroke-width=\"%.2f\" stroke-dasharray=\"%.2f %.2f\" stroke-opacity=\"0.7\"/>"
+              pts
+              (float (* 0.5 sw))
+              (float (* 2.0 sw))
+              (float (* 2.0 sw))))))
+
 (defn- pane-els
   "Returns a seq of SVG element strings for a single pane. Rects and circles
   are clipped to the pane's bounds so edge circles don't escape into adjacent
   space. The border is drawn on top, unclipped. clip-id must be unique within
-  the enclosing document."
+  the enclosing document.
+
+  If the pane has :curve-points, a faint dashed polyline is drawn behind
+  the circles as a dev overlay."
   [pane unit sw clip-id]
   (let [rect-els (atom [])
         _        (walk/prewalk
@@ -62,6 +80,7 @@
                      node)
                    (:rect pane))
         circle-els (map #(circle-el % unit sw) (:circles pane))
+        curve      (curve-el (:curve-points pane) unit sw)
         [w h]    (:dim pane)
         pw       (float (* w unit))
         ph       (float (* h unit))
@@ -73,28 +92,39 @@
       [clip
        (format "<g clip-path=\"url(#%s)\">" clip-id)]
       @rect-els
+      (when curve [curve])
       circle-els
       ["</g>" border])))
 
 (defn- svg-doc [width height body-lines]
+  ;; viewBox makes the SVG scalable while preserving aspect ratio (via the
+  ;; default preserveAspectRatio="xMidYMid meet"). Without it, browsers treat
+  ;; width/height as raw pixels and the SVG overflows its CSS container
+  ;; instead of scaling down -- which is why the bottom of tall triptychs
+  ;; was being cut off in the web UI.
   (str/join "\n"
     (concat
       ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-       (format "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%.0f\" height=\"%.0f\">" width height)]
+       (format "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%.0f\" height=\"%.0f\" viewBox=\"0 0 %.2f %.2f\">"
+               width height width height)]
       body-lines
       ["</svg>"])))
 
+;; Padding around content so border strokes don't sit flush against the
+;; SVG viewport edge. At viewport-boundary, strokes get partially clipped
+;; during browser sub-pixel rasterization (especially after CSS scaling),
+;; which is why the right/bottom borders appeared to vanish in the UI.
+;; Using `sw` on each side leaves a half-stroke of breathing room.
 (defn render
   "Returns an SVG string for a single fully-rendered pane."
   [pane unit stroke-weight-units]
   (let [sw     (* stroke-weight-units unit)
-        sw2    (/ sw 2.0)
         [w h]  (:dim pane)
-        width  (+ (* w unit) sw)
-        height (+ (* h unit) sw)]
+        width  (+ (* w unit) (* 2 sw))
+        height (+ (* h unit) (* 2 sw))]
     (svg-doc width height
       (concat
-        [(format "<g transform=\"translate(%.2f,%.2f)\">" sw2 sw2)]
+        [(format "<g transform=\"translate(%.2f,%.2f)\">" sw sw)]
         (pane-els pane unit sw "pane")
         ["</g>"]))))
 
@@ -104,23 +134,22 @@
   equal dimensions; center should be twice the width."
   [left center right unit stroke-weight-units gap-units]
   (let [sw      (* stroke-weight-units unit)
-        sw2     (/ sw 2.0)
         gap     (* gap-units unit)
         [lw h]  (:dim left)
         [cw _]  (:dim center)
-        total-w (+ (* lw unit) gap (* cw unit) gap (* lw unit) sw)
-        total-h (+ (* h unit) sw)
-        left-x   sw2
-        center-x (+ (* lw unit) gap sw2)
-        right-x  (+ (* lw unit) gap (* cw unit) gap sw2)]
+        total-w (+ (* lw unit) gap (* cw unit) gap (* lw unit) (* 2 sw))
+        total-h (+ (* h unit) (* 2 sw))
+        left-x   sw
+        center-x (+ (* lw unit) gap sw)
+        right-x  (+ (* lw unit) gap (* cw unit) gap sw)]
     (svg-doc total-w total-h
       (concat
-        [(format "<g transform=\"translate(%.2f,%.2f)\">" left-x sw2)]
+        [(format "<g transform=\"translate(%.2f,%.2f)\">" left-x sw)]
         (pane-els left unit sw "pane-left")
         ["</g>"
-         (format "<g transform=\"translate(%.2f,%.2f)\">" center-x sw2)]
+         (format "<g transform=\"translate(%.2f,%.2f)\">" center-x sw)]
         (pane-els center unit sw "pane-center")
         ["</g>"
-         (format "<g transform=\"translate(%.2f,%.2f)\">" right-x sw2)]
+         (format "<g transform=\"translate(%.2f,%.2f)\">" right-x sw)]
         (pane-els right unit sw "pane-right")
         ["</g>"]))))

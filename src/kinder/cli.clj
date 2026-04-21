@@ -14,7 +14,7 @@
    "red"    core/red-palette
    "orange" core/orange-palette})
 
-(def ^:private layouts #{"single" "triptych" "triptych-equal"})
+(def ^:private layouts #{"single" "triptych" "triptych-equal" "triptych-variation"})
 
 (def ^:private cli-options
   [["-W" "--width INT"    "Canvas width in units"          :default 30  :parse-fn #(Integer/parseInt %)]
@@ -25,8 +25,43 @@
     :validate [#(contains? palette-map %) "Must be kinder, red, or orange"]]
    ["-o" "--out PATH"     "Output SVG path (single piece only)"]
    ["-n" "--count INT"    "Number of pieces to generate"   :default 1   :parse-fn #(Integer/parseInt %)]
-   ["-l" "--layout NAME"  "Layout: single | triptych | triptych-equal" :default "single"
-    :validate [layouts "Must be single, triptych, or triptych-equal"]]
+   ["-l" "--layout NAME"  "Layout: single | triptych | triptych-equal | triptych-variation" :default "single"
+    :validate [layouts "Must be single, triptych, triptych-equal, or triptych-variation"]]
+   ;; --- triptych-variation tuning (ignored for other layouts) ---
+   ;; How many subtrees to regenerate per panel. 0 gives identical panels;
+   ;; higher values lose the family resemblance.
+   [nil "--mutations INT" "Subtrees to regenerate per panel (triptych-variation)"
+    :default 2 :parse-fn #(Integer/parseInt %)]
+   ;; Shallowest depth a mutation can target. 1 excludes the root (which would
+   ;; just produce an independent panel).
+   [nil "--min-depth INT" "Shallowest mutatable depth (triptych-variation)"
+    :default 1 :parse-fn #(Integer/parseInt %)]
+   ;; Deepest depth a mutation can target. Smaller values = bigger visible
+   ;; changes; larger values = subtler local changes.
+   [nil "--max-depth INT" "Deepest mutatable depth (triptych-variation)"
+    :default 4 :parse-fn #(Integer/parseInt %)]
+   ;; Minimum rect dimension (in units) to be a mutation target. Skips tiny
+   ;; rects where a regenerated subtree wouldn't be visible.
+   [nil "--min-dim INT"   "Minimum rect dim to mutate (triptych-variation)"
+    :default 3 :parse-fn #(Integer/parseInt %)]
+   ;; --- coordinated-circles tuning (triptych-variation only) ---
+   ;; When on, replaces each panel's independent circles with circles sampled
+   ;; along a shared curve spanning the triptych. Curve angle and phase are
+   ;; randomized per seed; amplitude/frequency below shape the wave.
+   [nil "--coordinated-circles" "Place circles along a shared curve (triptych-variation)"]
+   [nil "--circle-count INT"    "Total circles across the triptych"
+    :default 8 :parse-fn #(Integer/parseInt %)]
+   [nil "--jitter-along NUM"    "Along-curve wander, fraction of spacing"
+    :default 0.3 :parse-fn #(Double/parseDouble %)]
+   [nil "--jitter-perp NUM"     "Perp wander, fraction of panel height"
+    :default 0.2 :parse-fn #(Double/parseDouble %)]
+   [nil "--amplitude NUM"       "Sine amplitude, fraction of panel height (0 = straight line)"
+    :default 0.25 :parse-fn #(Double/parseDouble %)]
+   [nil "--frequency NUM"       "Sine cycles across triptych width"
+    :default 1.0 :parse-fn #(Double/parseDouble %)]
+   ;; Dev overlay: draws the underlying curve as a faint dashed polyline
+   ;; so you can see where coordinated circles are supposed to land.
+   [nil "--show-curve"          "Overlay the coordinated-circles curve as a faint line (dev)"]
    ["-O" "--open"         "Open each SVG after generating"]
    ["-h" "--help"]])
 
@@ -67,7 +102,7 @@
 (defn- generate-triptych [opts seed center-multiplier]
   (let [{:keys [width height unit palette out open]} opts
         stroke-weight 0.2
-        gap      1
+        gap      6
         pal      (get palette-map palette)
         seed     (or seed (-> (Random.) .nextLong))
         left     (make-pane [width height] seed pal)
@@ -76,6 +111,61 @@
         out-file (or out (output-path seed))]
     (io/make-parents out-file)
     (spit out-file (svg/render-triptych left center right unit stroke-weight gap))
+    (finish! out-file open)))
+
+(defn- with-coordinated-circles
+  "Overwrites each pane's :circles with circles sampled from a curve
+  spanning the triptych. Uses a seed offset from the master so toggling
+  this option doesn't perturb the underlying pane mutations. When
+  :show-curve is on, also attaches :curve-points to each pane for the
+  dev overlay polyline."
+  [{:keys [left center right]} {:keys [width height seed pal gap opts]}]
+  (let [{:keys [circles curves]}
+        (core/coordinated-circles
+          {:panel-w width :center-w width :panel-h height :gap gap
+           :seed (+ seed 100) :palette pal
+           :n            (:circle-count opts)
+           :jitter-along (:jitter-along opts)
+           :jitter-perp  (:jitter-perp opts)
+           :amplitude    (:amplitude opts)
+           :frequency    (:frequency opts)})
+        attach (fn [pane k]
+                 (cond-> (assoc pane :circles (get circles k))
+                   (:show-curve opts) (assoc :curve-points (get curves k))))]
+    {:left   (attach left   :left)
+     :center (attach center :center)
+     :right  (attach right  :right)}))
+
+(defn- generate-variation-triptych
+  "Three panels that share a base skeleton, each with localized subtree
+  mutations driven by sub-seeds derived from the master seed."
+  [opts seed]
+  (let [{:keys [width height unit palette out open
+                mutations min-depth max-depth min-dim
+                coordinated-circles]} opts
+        stroke-weight 0.2
+        gap      6
+        pal      (get palette-map palette)
+        seed     (or seed (-> (Random.) .nextLong))
+        base     (make-pane [width height] seed pal)
+        mopts    {:n-mutations mutations
+                  :min-depth   min-depth
+                  :max-depth   max-depth
+                  :min-dim     min-dim}
+        ;; +1/+2/+3 so left is also a variation (not the raw base) --
+        ;; all three panels are siblings, none privileged.
+        panes    {:left   (core/mutate-pane base (+ seed 1) pal mopts)
+                  :center (core/mutate-pane base (+ seed 2) pal mopts)
+                  :right  (core/mutate-pane base (+ seed 3) pal mopts)}
+        panes    (if coordinated-circles
+                   (with-coordinated-circles
+                     panes
+                     {:width width :height height :seed seed :pal pal :gap gap :opts opts})
+                   panes)
+        out-file (or out (output-path seed))]
+    (io/make-parents out-file)
+    (spit out-file (svg/render-triptych (:left panes) (:center panes) (:right panes)
+                                        unit stroke-weight gap))
     (finish! out-file open)))
 
 (defn -main [& args]
@@ -90,8 +180,9 @@
 
       :else
       (case (:layout options)
-        "triptych"       (generate-triptych options (:seed options) 2)
-        "triptych-equal" (generate-triptych options (:seed options) 1)
+        "triptych"           (generate-triptych options (:seed options) 2)
+        "triptych-equal"     (generate-triptych options (:seed options) 1)
+        "triptych-variation" (generate-variation-triptych options (:seed options))
         "single"
         (let [{:keys [seed count]} options
               n (if (and seed (> count 1)) 1 count)]

@@ -15,7 +15,15 @@
    "orange" core/orange-palette})
 
 (def ^:private defaults
-  {:width 30 :height 70 :unit 10 :stroke-weight 0.2 :palette "kinder" :gap 1})
+  {:width 30 :height 70 :unit 10 :stroke-weight 0.2 :palette "kinder" :gap 6
+   ;; triptych-variation defaults -- see kinder.core/mutate-pane for semantics
+   :mutations 2 :min-depth 1 :max-depth 4 :min-dim 3
+   ;; coordinated-circles defaults -- see kinder.core/coordinated-circles
+   :coordinated-circles false
+   :circle-count 8 :jitter-along 0.3 :jitter-perp 0.2
+   :amplitude 0.25 :frequency 1.0
+   ;; Dev overlay: draws the curve as a faint dashed line
+   :show-curve false})
 
 (defn- random-seed []
   (-> (Random.) .nextLong))
@@ -33,16 +41,62 @@
         right     (cli/make-pane [width height] (+ seed 2) pal)]
     (svg/render-triptych left center right unit stroke-weight gap)))
 
-(def ^:private modes #{"single" "triptych" "triptych-equal"})
+(defn- render-triptych-variation
+  [{:keys [width height unit stroke-weight palette gap seed
+           mutations min-depth max-depth min-dim
+           coordinated-circles circle-count
+           jitter-along jitter-perp amplitude frequency
+           show-curve]}]
+  (let [pal    (get palette-map palette)
+        base   (cli/make-pane [width height] seed pal)
+        mopts  {:n-mutations mutations
+                :min-depth   min-depth
+                :max-depth   max-depth
+                :min-dim     min-dim}
+        panes  {:left   (core/mutate-pane base (+ seed 1) pal mopts)
+                :center (core/mutate-pane base (+ seed 2) pal mopts)
+                :right  (core/mutate-pane base (+ seed 3) pal mopts)}
+        panes  (if coordinated-circles
+                 (let [{:keys [circles curves]}
+                       (core/coordinated-circles
+                         {:panel-w width :center-w width :panel-h height :gap gap
+                          :seed (+ seed 100) :palette pal
+                          :n            circle-count
+                          :jitter-along jitter-along
+                          :jitter-perp  jitter-perp
+                          :amplitude    amplitude
+                          :frequency    frequency})
+                       attach (fn [pane k]
+                                (cond-> (assoc pane :circles (get circles k))
+                                  show-curve (assoc :curve-points (get curves k))))]
+                   {:left   (attach (:left panes)   :left)
+                    :center (attach (:center panes) :center)
+                    :right  (attach (:right panes)  :right)})
+                 panes)]
+    (svg/render-triptych (:left panes) (:center panes) (:right panes)
+                         unit stroke-weight gap)))
+
+(def ^:private modes #{"single" "triptych" "triptych-equal" "triptych-variation"})
+
+;; kinder.core uses the random-seed library, which stores its RNG in a
+;; single global var. Concurrent requests call `set-random-seed!` on top
+;; of each other, corrupting in-flight generations. Serializing here is
+;; pragmatic -- generation is fast and this is a single-user dev app.
+(def ^:private gen-lock (Object.))
 
 (defn- build [params]
-  (let [seed   (or (:seed params) (random-seed))
-        mode   (get modes (:mode params) "single")
-        params (merge defaults params {:seed seed :mode mode})
-        body   (if (str/starts-with? mode "triptych")
-                 (render-triptych params)
-                 (render-single params))]
-    {:svg body :seed seed :mode mode}))
+  (locking gen-lock
+    (let [seed   (or (:seed params) (random-seed))
+          mode   (get modes (:mode params) "single")
+          params (merge defaults params {:seed seed :mode mode})
+          body   (case mode
+                   "triptych-variation"          (render-triptych-variation params)
+                   ("triptych" "triptych-equal") (render-triptych params)
+                   (render-single params))]
+      ;; Return seed as a string: a Clojure long can exceed JS Number's
+      ;; 2^53 safe-integer range, and a lossy round-trip would re-seed to
+      ;; a nearby long, producing a different image on re-submission.
+      {:svg body :seed (str seed) :mode mode})))
 
 (defn- save [params]
   (let [{:keys [svg seed]} (build params)
@@ -102,13 +156,39 @@
         (let [[k v] (str/split pair #"=" 2)]
           [(keyword k) (URLDecoder/decode (or v "") "UTF-8")])))))
 
-(defn- coerce [{:keys [mode seed gap]}]
+(defn- parse-long-opt [v]
+  (when (and v (not (str/blank? (str v))))
+    (if (number? v) (long v) (Long/parseLong v))))
+
+(defn- parse-double-opt [v]
+  (when (and v (not (str/blank? (str v))))
+    (if (number? v) (double v) (Double/parseDouble v))))
+
+(defn- parse-bool-opt [v]
+  (when (and (some? v) (not (str/blank? (str v))))
+    (contains? #{"true" "1" "on" "yes"} (str/lower-case (str v)))))
+
+(defn- coerce [{:keys [mode seed gap mutations min-depth max-depth min-dim
+                       coordinated-circles circle-count
+                       jitter-along jitter-perp amplitude frequency show-curve]
+                :as params}]
   (cond-> {}
-    mode (assoc :mode mode)
-    (and seed (not (str/blank? (str seed))))
-    (assoc :seed (if (number? seed) (long seed) (Long/parseLong seed)))
-    (and gap (not (str/blank? (str gap))))
-    (assoc :gap (if (number? gap) (double gap) (Double/parseDouble gap)))))
+    mode                              (assoc :mode mode)
+    (parse-long-opt seed)             (assoc :seed (parse-long-opt seed))
+    (parse-double-opt gap)            (assoc :gap (parse-double-opt gap))
+    (parse-long-opt mutations)        (assoc :mutations (parse-long-opt mutations))
+    (parse-long-opt min-depth)        (assoc :min-depth (parse-long-opt min-depth))
+    (parse-long-opt max-depth)        (assoc :max-depth (parse-long-opt max-depth))
+    (parse-long-opt min-dim)          (assoc :min-dim (parse-long-opt min-dim))
+    (contains? params :coordinated-circles)
+    (assoc :coordinated-circles (boolean (parse-bool-opt coordinated-circles)))
+    (parse-long-opt circle-count)     (assoc :circle-count (parse-long-opt circle-count))
+    (parse-double-opt jitter-along)   (assoc :jitter-along (parse-double-opt jitter-along))
+    (parse-double-opt jitter-perp)    (assoc :jitter-perp (parse-double-opt jitter-perp))
+    (parse-double-opt amplitude)      (assoc :amplitude (parse-double-opt amplitude))
+    (parse-double-opt frequency)      (assoc :frequency (parse-double-opt frequency))
+    (contains? params :show-curve)
+    (assoc :show-curve (boolean (parse-bool-opt show-curve)))))
 
 (defn- json-response [status body]
   {:status status

@@ -183,11 +183,50 @@
     <label><input type="radio" name="mode" value="single" checked> single</label>
     <label><input type="radio" name="mode" value="triptych"> triptych (1:2:1)</label>
     <label><input type="radio" name="mode" value="triptych-equal"> triptych (1:1:1)</label>
-    <label>gap: <input type="number" id="gap" value="1" min="0" step="0.5" style="width: 5em;"></label>
+    <label><input type="radio" name="mode" value="triptych-variation"> triptych (variation)</label>
+    <label>gap: <input type="number" id="gap" value="6" min="0" step="0.5" style="width: 5em;"></label>
     <button id="generate" type="button">generate (enter)</button>
     <button id="save" type="button">save (s)</button>
     <button id="reset" type="button">reset view (r)</button>
     <span class="seed" id="seed"></span>
+  </div>
+  <div class="bar" id="variation-params" hidden>
+    <span>variation:</span>
+    <label title="Subtrees to regenerate per panel. 0 = identical panels; too many = panels drift apart.">
+      mutations: <input type="number" id="mutations" value="2" min="0" step="1" style="width: 4em;">
+    </label>
+    <label title="Shallowest mutation depth. 1 excludes the root (which would make panels fully independent).">
+      min-depth: <input type="number" id="min-depth" value="1" min="1" step="1" style="width: 4em;">
+    </label>
+    <label title="Deepest mutation depth. Smaller values = bigger visible changes; larger = subtler.">
+      max-depth: <input type="number" id="max-depth" value="4" min="1" step="1" style="width: 4em;">
+    </label>
+    <label title="Minimum rect dimension (in units) eligible to mutate. Skips nodes too small to see.">
+      min-dim: <input type="number" id="min-dim" value="3" min="1" step="1" style="width: 4em;">
+    </label>
+  </div>
+  <div class="bar" id="coordinated-params" hidden>
+    <label title="Replace each panel's independent circles with circles sampled along a shared curve across the whole triptych.">
+      <input type="checkbox" id="coordinated-circles"> coordinated circles
+    </label>
+    <label title="Total circles sampled across the triptych (some may land in gaps and be dropped).">
+      count: <input type="number" id="circle-count" value="8" min="1" step="1" style="width: 4em;">
+    </label>
+    <label title="Random wander along the curve, as a fraction of the spacing between adjacent samples.">
+      along: <input type="number" id="jitter-along" value="0.3" min="0" step="0.05" style="width: 5em;">
+    </label>
+    <label title="Random wander perpendicular to the curve, as a fraction of panel height. Negative values permitted (statistically equivalent to positive since jitter is symmetric).">
+      perp: <input type="number" id="jitter-perp" value="0.2" step="0.05" style="width: 5em;">
+    </label>
+    <label title="Sine amplitude as a fraction of panel height. 0 = straight line. Negative values flip the curve direction.">
+      amplitude: <input type="number" id="amplitude" value="0.25" step="0.05" style="width: 5em;">
+    </label>
+    <label title="Sine cycles across the full triptych width.">
+      frequency: <input type="number" id="frequency" value="1.0" min="0" step="0.25" style="width: 5em;">
+    </label>
+    <label title="Dev overlay: draws the underlying curve as a faint dashed line so you can see where circles should be falling.">
+      <input type="checkbox" id="show-curve"> show curve
+    </label>
   </div>
   <div class="viewport" id="viewport">
     <div class="canvas" id="canvas">
@@ -212,6 +251,19 @@ const canvas = document.getElementById('canvas');
 const seedEl = document.getElementById('seed');
 const toastEl = document.getElementById('toast');
 const gapEl = document.getElementById('gap');
+const variationParamsEl = document.getElementById('variation-params');
+const coordinatedParamsEl = document.getElementById('coordinated-params');
+const mutationsEl = document.getElementById('mutations');
+const minDepthEl = document.getElementById('min-depth');
+const maxDepthEl = document.getElementById('max-depth');
+const minDimEl = document.getElementById('min-dim');
+const coordinatedEl = document.getElementById('coordinated-circles');
+const circleCountEl = document.getElementById('circle-count');
+const jitterAlongEl = document.getElementById('jitter-along');
+const jitterPerpEl = document.getElementById('jitter-perp');
+const amplitudeEl = document.getElementById('amplitude');
+const frequencyEl = document.getElementById('frequency');
+const showCurveEl = document.getElementById('show-curve');
 let state = { seed: null, mode: 'single' };
 
 function currentMode() {
@@ -220,22 +272,83 @@ function currentMode() {
 
 function currentGap() {
   const v = parseFloat(gapEl.value);
-  return isNaN(v) ? 1 : v;
+  return isNaN(v) ? 6 : v;
 }
 
+function intValue(el, fallback) {
+  const v = parseInt(el.value, 10);
+  return isNaN(v) ? fallback : v;
+}
+
+function floatValue(el, fallback) {
+  const v = parseFloat(el.value);
+  return isNaN(v) ? fallback : v;
+}
+
+function currentVariationParams() {
+  return {
+    mutations: intValue(mutationsEl, 2),
+    'min-depth': intValue(minDepthEl, 1),
+    'max-depth': intValue(maxDepthEl, 4),
+    'min-dim': intValue(minDimEl, 3),
+  };
+}
+
+function currentCoordinatedParams() {
+  return {
+    'coordinated-circles': coordinatedEl.checked,
+    'circle-count': intValue(circleCountEl, 8),
+    'jitter-along': floatValue(jitterAlongEl, 0.3),
+    'jitter-perp': floatValue(jitterPerpEl, 0.2),
+    amplitude: floatValue(amplitudeEl, 0.25),
+    frequency: floatValue(frequencyEl, 1.0),
+    'show-curve': showCurveEl.checked,
+  };
+}
+
+function syncVariationVisibility() {
+  const show = (currentMode() === 'triptych-variation');
+  variationParamsEl.hidden = !show;
+  coordinatedParamsEl.hidden = !show;
+}
+
+// Incremented on every call. Each in-flight request captures its own
+// version; responses whose version no longer matches are discarded so a
+// slow earlier response can't clobber a newer one's stage content.
+let generateVersion = 0;
+
 async function generate({ reuseSeed = false } = {}) {
+  const v = ++generateVersion;
+  const mode = currentMode();
   const url = new URL('/generate', window.location.origin);
-  url.searchParams.set('mode', currentMode());
+  url.searchParams.set('mode', mode);
   url.searchParams.set('gap', String(currentGap()));
+  if (mode === 'triptych-variation') {
+    const p = { ...currentVariationParams(), ...currentCoordinatedParams() };
+    for (const [k, v] of Object.entries(p)) url.searchParams.set(k, String(v));
+  }
   if (reuseSeed && state.seed != null) {
     url.searchParams.set('seed', String(state.seed));
   }
   const res = await fetch(url);
+  if (v !== generateVersion) return;
   if (!res.ok) { showToast('generate failed: ' + res.status); return; }
   const data = await res.json();
+  if (v !== generateVersion) return;
   state = { seed: data.seed, mode: data.mode };
   stage.innerHTML = data.svg;
   seedEl.textContent = `seed: ${data.seed} · mode: ${data.mode}`;
+}
+
+// Debounce for rapid input (holding an arrow key on a number field fires
+// many change events). Debouncing collapses the burst into one request.
+let debouncedGenerateTimer = null;
+function debouncedGenerate() {
+  clearTimeout(debouncedGenerateTimer);
+  debouncedGenerateTimer = setTimeout(
+    () => generate({ reuseSeed: true }),
+    120,
+  );
 }
 
 let view = { scale: 1, tx: 0, ty: 0 };
@@ -286,10 +399,14 @@ viewport.addEventListener('dblclick', resetView);
 
 async function save() {
   if (state.seed == null) return;
+  const payload = { seed: state.seed, mode: state.mode, gap: currentGap() };
+  if (state.mode === 'triptych-variation') {
+    Object.assign(payload, currentVariationParams(), currentCoordinatedParams());
+  }
   const res = await fetch('/save', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ seed: state.seed, mode: state.mode, gap: currentGap() }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) { showToast('save failed: ' + res.status); return; }
   const data = await res.json();
@@ -308,9 +425,21 @@ document.getElementById('generate').addEventListener('click', () => generate());
 document.getElementById('save').addEventListener('click', save);
 document.getElementById('reset').addEventListener('click', resetView);
 document.querySelectorAll('input[name=mode]').forEach((el) => {
-  el.addEventListener('change', () => generate({ reuseSeed: true }));
+  el.addEventListener('change', () => {
+    syncVariationVisibility();
+    generate({ reuseSeed: true });
+  });
 });
 gapEl.addEventListener('change', () => generate({ reuseSeed: true }));
+// Param inputs: debounce so holding an arrow key doesn't fire dozens of
+// fetches (each of which would race on the server's global RNG).
+[mutationsEl, minDepthEl, maxDepthEl, minDimEl,
+ coordinatedEl, circleCountEl, jitterAlongEl, jitterPerpEl,
+ amplitudeEl, frequencyEl, showCurveEl].forEach((el) => {
+  el.addEventListener('change', debouncedGenerate);
+  el.addEventListener('input', debouncedGenerate);
+});
+syncVariationVisibility();
 
 // -- views --
 
@@ -387,6 +516,9 @@ fs.querySelector('.next').addEventListener('click', (e) => { e.stopPropagation()
 document.addEventListener('keydown', (e) => {
   const tag = e.target.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  // Don't intercept when the user is holding a modifier -- those combos
+  // (Cmd+R, Cmd+Shift+R, Cmd+S, etc.) belong to the browser.
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
 
   if (!fs.hidden) {
     if (e.key === 'Escape') { e.preventDefault(); closeFullscreen(); }
