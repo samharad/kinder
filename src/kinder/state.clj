@@ -63,10 +63,13 @@
 
 
 
-(defn init-state [dimensions]
-  (let [pane (core/generate-pane dimensions)]
-    (-> {:pane pane}
-        (assoc :render-depth 0))))
+(defn init-state
+  ([dimensions] (init-state dimensions nil))
+  ([dimensions seed]
+   (let [pane (if seed
+                (core/generate-pane dimensions :seed seed)
+                (core/generate-pane dimensions))]
+     {:pane pane :render-depth 0})))
 
 (defn re-init! [state]
   (swap! state #(init-state (:dim (:pane %)))))
