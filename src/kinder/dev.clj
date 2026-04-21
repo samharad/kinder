@@ -8,11 +8,15 @@
             [clojure.string :as str])
   (:import (java.time LocalDateTime)))
 
-(defn get-commit-message []
-  (-> (sh "git" "log" "-1" "--pretty=%s")
-      :out
-      (str/trim)
-      (str/replace " " "-")))
+(defn- get-short-sha []
+  (-> (sh "git" "rev-parse" "--short" "HEAD") :out str/trim))
+
+(defn- timestamp []
+  (let [now (LocalDateTime/now)
+        ms  (quot (.getNano now) 1000000)]
+    (format "%d-%02d-%02d-%02d%02d%02d%03d"
+            (.getYear now) (.getMonthValue now) (.getDayOfMonth now)
+            (.getHour now) (.getMinute now) (.getSecond now) ms)))
 
 (def dim [30 70])
 (def unit 10)
@@ -24,12 +28,7 @@
 (st/complete! state)
 
 (defn get-filename []
-  (str (.toString (LocalDateTime/now))
-       "_"
-       (:seed @state)
-       "_"
-       (get-commit-message)
-       ".svg"))
+  (str (timestamp) "-" (:seed @state) "-" (get-short-sha) ".svg"))
 
 (def filename (str "output/svg/" (get-filename)))
 (def dev-filename (str "output/svg/dev.svg"))
