@@ -14,6 +14,8 @@
    "red"    core/red-palette
    "orange" core/orange-palette})
 
+(def ^:private layouts #{"single" "triptych" "triptych-equal"})
+
 (def ^:private cli-options
   [["-W" "--width INT"    "Canvas width in units"          :default 30  :parse-fn #(Integer/parseInt %)]
    ["-H" "--height INT"   "Canvas height in units"         :default 70  :parse-fn #(Integer/parseInt %)]
@@ -23,24 +25,25 @@
     :validate [#(contains? palette-map %) "Must be kinder, red, or orange"]]
    ["-o" "--out PATH"     "Output SVG path (single piece only)"]
    ["-n" "--count INT"    "Number of pieces to generate"   :default 1   :parse-fn #(Integer/parseInt %)]
-   ["-t" "--triptych"     "Generate a 1:2:1 triptych"]
+   ["-l" "--layout NAME"  "Layout: single | triptych | triptych-equal" :default "single"
+    :validate [layouts "Must be single, triptych, or triptych-equal"]]
    ["-O" "--open"         "Open each SVG after generating"]
    ["-h" "--help"]])
 
-(defn- get-short-sha []
+(defn get-short-sha []
   (-> (sh "git" "rev-parse" "--short" "HEAD") :out str/trim))
 
-(defn- timestamp []
+(defn timestamp []
   (let [now (LocalDateTime/now)
         ms  (quot (.getNano now) 1000000)]
     (format "%d-%02d-%02d-%02d%02d%02d%03d"
             (.getYear now) (.getMonthValue now) (.getDayOfMonth now)
             (.getHour now) (.getMinute now) (.getSecond now) ms)))
 
-(defn- output-path [seed]
+(defn output-path [seed]
   (str "output/svg/" (timestamp) "-" seed "-" (get-short-sha) ".svg"))
 
-(defn- make-pane [dim seed palette]
+(defn make-pane [dim seed palette]
   (let [state (atom {:pane (core/generate-pane dim :seed seed :palette palette)
                      :render-depth 0})]
     (st/complete! state)
@@ -61,14 +64,14 @@
     (spit out-file (svg/render pane unit stroke-weight))
     (finish! out-file open)))
 
-(defn- generate-triptych [opts seed]
+(defn- generate-triptych [opts seed center-multiplier]
   (let [{:keys [width height unit palette out open]} opts
         stroke-weight 0.2
         gap      1
         pal      (get palette-map palette)
         seed     (or seed (-> (Random.) .nextLong))
         left     (make-pane [width height] seed pal)
-        center   (make-pane [(* 2 width) height] (+ seed 1) pal)
+        center   (make-pane [(* center-multiplier width) height] (+ seed 1) pal)
         right    (make-pane [width height] (+ seed 2) pal)
         out-file (or out (output-path seed))]
     (io/make-parents out-file)
@@ -85,14 +88,15 @@
       (do (doseq [e errors] (println e))
           (System/exit 1))
 
-      (:triptych options)
-      (generate-triptych options (:seed options))
-
       :else
-      (let [{:keys [seed count]} options
-            n (if (and seed (> count 1)) 1 count)]
-        (when (and seed (> count 1))
-          (println "Warning: --seed ignores --count; generating one piece"))
-        (dotimes [i n]
-          (generate-one options (when (zero? i) seed)))
-        (System/exit 0)))))
+      (case (:layout options)
+        "triptych"       (generate-triptych options (:seed options) 2)
+        "triptych-equal" (generate-triptych options (:seed options) 1)
+        "single"
+        (let [{:keys [seed count]} options
+              n (if (and seed (> count 1)) 1 count)]
+          (when (and seed (> count 1))
+            (println "Warning: --seed ignores --count; generating one piece"))
+          (dotimes [i n]
+            (generate-one options (when (zero? i) seed)))
+          (System/exit 0))))))

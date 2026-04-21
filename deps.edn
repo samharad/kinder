@@ -1,8 +1,12 @@
-{:deps {quil/quil               {:mvn/version "3.1.0"}
+{:paths ["src" "resources"]
+ :deps {quil/quil               {:mvn/version "3.1.0"}
         random-seed/random-seed {:mvn/version "1.0.0"}
         org.clojure/spec.alpha  {:mvn/version "0.2.194"}
         orchestra/orchestra     {:mvn/version "2021.01.01-1"}
         tubular                 {:mvn/version "1.3.0"}
         org.clojure/core.async  {:mvn/version "1.3.618"}
-        org.clojure/tools.cli   {:mvn/version "1.1.230"}}
- :aliases {:cli {:main-opts ["-m" "kinder.cli"]}}}
+        org.clojure/tools.cli   {:mvn/version "1.1.230"}
+        http-kit/http-kit       {:mvn/version "2.7.0"}
+        org.clojure/data.json   {:mvn/version "2.5.0"}}
+ :aliases {:cli {:main-opts ["-m" "kinder.cli"]}
+           :web {:main-opts ["-m" "kinder.web"]}}}
