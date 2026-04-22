@@ -180,20 +180,42 @@
 <div class="view" id="generate-view">
   <div class="bar">
     <span>mode:</span>
-    <label><input type="radio" name="mode" value="single" checked> single</label>
-    <label><input type="radio" name="mode" value="triptych"> triptych (1:2:1)</label>
-    <label><input type="radio" name="mode" value="triptych-equal"> triptych (1:1:1)</label>
-    <label><input type="radio" name="mode" value="triptych-variation"> triptych (variation)</label>
-    <label>gap: <input type="number" id="gap" value="6" min="0" step="0.5" style="width: 5em;"></label>
-    <button id="generate" type="button">generate (enter)</button>
-    <button id="save" type="button">save (s)</button>
-    <button id="reset" type="button">reset view (r)</button>
-    <span class="seed" id="seed"></span>
+    <label title="A single standalone pane.">
+      <input type="radio" name="mode" value="single"> single
+    </label>
+    <label title="Three independent panes laid out 1:2:1 -- narrow, wide, narrow. Each is generated from its own seed.">
+      <input type="radio" name="mode" value="triptych"> triptych (1:2:1)
+    </label>
+    <label title="Three independent panes of equal width (1:1:1). Each is generated from its own seed.">
+      <input type="radio" name="mode" value="triptych-equal"> triptych (1:1:1)
+    </label>
+    <label title="Three equal-width panes that share a base skeleton, each with localized subtree mutations. Reveals the variation + coordinated-circles controls below.">
+      <input type="radio" name="mode" value="triptych-variation" checked> triptych (variation)
+    </label>
+    <label title="Gap in units between triptych panels. Ignored in single mode.">
+      gap: <input type="number" id="gap" value="6" min="0" step="0.5" style="width: 5em;">
+    </label>
+    <button id="generate" type="button" title="Generate a new image with a fresh random seed. Keyboard: Enter.">generate (enter)</button>
+    <button id="save" type="button" title="Save the current image to output/svg/ with a timestamped filename. Keyboard: s.">save (s)</button>
+    <button id="reset" type="button" title="Reset pan and zoom on the preview. Keyboard: r or 0. Double-click the preview does the same.">reset view (r)</button>
+    <span class="seed" id="seed" title="Current seed and mode. The seed uniquely identifies the image; changing any parameter and regenerating with the same seed is deterministic."></span>
+  </div>
+  <div class="bar">
+    <span>subdivision:</span>
+    <label title="Multiplier on the 'stop subdividing' weight across every size branch. 1.0 = current behavior. Lower = denser / fewer empty cream blocks. 0 = never stop voluntarily. Higher = more empty regions. Affects all modes.">
+      stop-weight: <input type="number" id="empty-weight-scale" value="1.0" min="0" step="0.1" style="width: 5em;">
+    </label>
+    <label title="Exponent shaping which divisor an even-split chooses. 1.0 = current behavior (small divisors favored → dense micro-patterns on 1-unit strips). 0 = uniform. Negative = large divisors favored (chunkier splits). Affects all modes.">
+      divisor-bias: <input type="number" id="divisor-bias" value="1.0" step="0.25" style="width: 5em;">
+    </label>
+    <label title="Exponent shaping preference for cutting along the rect's short axis. 1.0 = current behavior (10:1 favors short-axis cuts, so tall panes get horizontal bands). 0 = 50/50. Negative favors long-axis cuts (vertical mullions on tall panes, Frank Lloyd Wright look). Affects all modes.">
+      cut-direction-bias: <input type="number" id="cut-direction-bias" value="1.0" step="0.25" style="width: 5em;">
+    </label>
   </div>
   <div class="bar" id="variation-params" hidden>
     <span>variation:</span>
     <label title="Subtrees to regenerate per panel. 0 = identical panels; too many = panels drift apart.">
-      mutations: <input type="number" id="mutations" value="2" min="0" step="1" style="width: 4em;">
+      mutations: <input type="number" id="mutations" value="20" min="0" step="1" style="width: 4em;">
     </label>
     <label title="Shallowest mutation depth. 1 excludes the root (which would make panels fully independent).">
       min-depth: <input type="number" id="min-depth" value="1" min="1" step="1" style="width: 4em;">
@@ -207,7 +229,7 @@
   </div>
   <div class="bar" id="coordinated-params" hidden>
     <label title="Replace each panel's independent circles with circles sampled along a shared curve across the whole triptych.">
-      <input type="checkbox" id="coordinated-circles"> coordinated circles
+      <input type="checkbox" id="coordinated-circles" checked> coordinated circles
     </label>
     <label title="Total circles sampled across the triptych (some may land in gaps and be dropped).">
       count: <input type="number" id="circle-count" value="8" min="1" step="1" style="width: 4em;">
@@ -253,6 +275,9 @@ const toastEl = document.getElementById('toast');
 const gapEl = document.getElementById('gap');
 const variationParamsEl = document.getElementById('variation-params');
 const coordinatedParamsEl = document.getElementById('coordinated-params');
+const emptyWeightScaleEl = document.getElementById('empty-weight-scale');
+const divisorBiasEl = document.getElementById('divisor-bias');
+const cutDirectionBiasEl = document.getElementById('cut-direction-bias');
 const mutationsEl = document.getElementById('mutations');
 const minDepthEl = document.getElementById('min-depth');
 const maxDepthEl = document.getElementById('max-depth');
@@ -285,9 +310,17 @@ function floatValue(el, fallback) {
   return isNaN(v) ? fallback : v;
 }
 
+function currentSubdivisionParams() {
+  return {
+    'empty-weight-scale': floatValue(emptyWeightScaleEl, 1.0),
+    'divisor-bias': floatValue(divisorBiasEl, 1.0),
+    'cut-direction-bias': floatValue(cutDirectionBiasEl, 1.0),
+  };
+}
+
 function currentVariationParams() {
   return {
-    mutations: intValue(mutationsEl, 2),
+    mutations: intValue(mutationsEl, 20),
     'min-depth': intValue(minDepthEl, 1),
     'max-depth': intValue(maxDepthEl, 4),
     'min-dim': intValue(minDimEl, 3),
@@ -323,6 +356,10 @@ async function generate({ reuseSeed = false } = {}) {
   const url = new URL('/generate', window.location.origin);
   url.searchParams.set('mode', mode);
   url.searchParams.set('gap', String(currentGap()));
+  // Subdivision density knobs apply in every mode.
+  for (const [k, v] of Object.entries(currentSubdivisionParams())) {
+    url.searchParams.set(k, String(v));
+  }
   if (mode === 'triptych-variation') {
     const p = { ...currentVariationParams(), ...currentCoordinatedParams() };
     for (const [k, v] of Object.entries(p)) url.searchParams.set(k, String(v));
@@ -399,7 +436,8 @@ viewport.addEventListener('dblclick', resetView);
 
 async function save() {
   if (state.seed == null) return;
-  const payload = { seed: state.seed, mode: state.mode, gap: currentGap() };
+  const payload = { seed: state.seed, mode: state.mode, gap: currentGap(),
+                    ...currentSubdivisionParams() };
   if (state.mode === 'triptych-variation') {
     Object.assign(payload, currentVariationParams(), currentCoordinatedParams());
   }
@@ -433,7 +471,8 @@ document.querySelectorAll('input[name=mode]').forEach((el) => {
 gapEl.addEventListener('change', () => generate({ reuseSeed: true }));
 // Param inputs: debounce so holding an arrow key doesn't fire dozens of
 // fetches (each of which would race on the server's global RNG).
-[mutationsEl, minDepthEl, maxDepthEl, minDimEl,
+[emptyWeightScaleEl, divisorBiasEl, cutDirectionBiasEl,
+ mutationsEl, minDepthEl, maxDepthEl, minDimEl,
  coordinatedEl, circleCountEl, jitterAlongEl, jitterPerpEl,
  amplitudeEl, frequencyEl, showCurveEl].forEach((el) => {
   el.addEventListener('change', debouncedGenerate);

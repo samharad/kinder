@@ -87,6 +87,44 @@
 (def ^:dynamic palette kinder-palette)
 (def ^:dynamic seed-rect {:dim [0 0]})
 
+;; --- density tuning ------------------------------------------------------
+;; These modulate the existing weighted-selection calls that shape the
+;; subdivision tree. Defaults preserve current behavior exactly.
+(def ^:dynamic ^{:doc "Multiplier on the `(constantly [])` weight in every
+  cond branch of `children`. 1.0 = current behavior. 0 = never stop
+  subdividing (panels fill up with pattern). >1 = more empty cream blocks."}
+  empty-weight-scale 1.0)
+
+(def ^:dynamic ^{:doc "Exponent shaping divisor weighting in `horz-even-children`
+  and its vertical twin. 1.0 = current behavior (small divisors favored,
+  which produces dense micro-patterns when a strip is 1 unit wide). 0 =
+  uniform (any divisor equally likely). Negative = favor large divisors
+  (chunky splits instead of tight ones)."}
+  divisor-bias 1.0)
+
+(def ^:dynamic ^{:doc "Exponent shaping the preference for cutting along the
+  rect's short axis vs the long axis. 1.0 = current behavior (10:1 in
+  favor of the short-axis cut, which produces horizontal bands on tall
+  panes). 0 = 50/50. Negative = favor long-axis cuts (vertical mullions
+  on tall panes, a la Frank Lloyd Wright)."}
+  cut-direction-bias 1.0)
+
+(defn- direction-weights
+  "Returns a [favored unfavored] pair of integer weights shaped by
+  `cut-direction-bias`. Always normalizes so both weights are ≥ 1."
+  [bias]
+  (let [favored   (Math/pow 10.0 (double bias))
+        unfavored 1.0
+        scale     (/ 1.0 (min favored unfavored))]
+    [(max 1 (int (Math/round (* favored scale))))
+     (max 1 (int (Math/round (* unfavored scale))))]))
+
+(defn- scaled-empty-weight
+  "Applies empty-weight-scale and returns an integer ≥ 0. weighted-selection
+  accepts 0 (that branch just never fires)."
+  [w]
+  (max 0 (int (Math/round (* (double w) (double empty-weight-scale))))))
+
 (defn- main-color []
   (:main palette))
 
@@ -153,14 +191,26 @@
       (let [children (-> rect flip-axes child-bearer-f)]
         (doall (mapv flip-axes children))))))
 
+(defn- divisor-weights
+  "Weights for each divisor in `divs`, shaped by the dynamic `divisor-bias`.
+  At bias=1.0 the result is proportional to the original linear weighting
+  (largest weight for smallest divisor). At bias=0 weights are uniform. At
+  negative bias, large divisors are favored (chunky splits)."
+  [divs]
+  (let [n (count divs)]
+    (mapv (fn [i]
+            (max 1 (int (Math/round
+                          (* 100.0
+                             (Math/pow (double (- n i))
+                                       (double divisor-bias)))))))
+          (range n))))
+
 (defn- horz-even-children [rect]
   (let [{:keys [dim loc assigned-color id]} rect
         [w h] dim
         [x y] loc
         divs (divisors h)
-        div (weighted-selection (mapv #(vector %1 %2)
-                                      divs
-                                      (range (count divs) 0 -1)))]
+        div (weighted-selection (mapv vector divs (divisor-weights divs)))]
     (->> (range y (+ y h) div)
          (map-indexed #(assign-and-express-color {:dim [w div]
                                                   :loc    [x %2]
@@ -279,7 +329,7 @@
               (weighted-selection [[sym 1]])
 
               (and is-square (> w 6) (> h 6))
-              (weighted-selection [[(constantly []) 4]
+              (weighted-selection [[(constantly []) (scaled-empty-weight 4)]
                                    [sym 1]
                                    [rand 1]
                                    [even 1]])
@@ -291,38 +341,38 @@
               is-pretty-big
               (weighted-selection [[sym 6]
                                    [rand 3]
-                                   [(constantly []) 4]])
+                                   [(constantly []) (scaled-empty-weight 4)]])
 
               is-long-and-maximally-skinny
               (weighted-selection [[even 10]
                                    [rand 10]
-                                   [(constantly []) 10]
+                                   [(constantly []) (scaled-empty-weight 10)]
                                    [stripe-sem 20]])
 
               is-maximally-skinny
               (weighted-selection [[even 10]
                                    ;[even 10]
                                    ;[rand 10]
-                                   [(constantly []) 4]])
+                                   [(constantly []) (scaled-empty-weight 4)]])
 
               ;is-short-and-skinny
               is-skinny ;; TODO tweak me
               (weighted-selection [[even 10]
                                    ;[even 10]
                                    ;[rand 10]
-                                   [(constantly []) 6]])
+                                   [(constantly []) (scaled-empty-weight 6)]])
 
               is-pretty-small
               (weighted-selection [[even 2]
                                    [rand 1]
                                    [sym 1]
-                                   [(constantly []) 10]])
+                                   [(constantly []) (scaled-empty-weight 10)]])
 
               :else
               (weighted-selection [[sym 4]
                                    [rand 8]
                                    [even 2]
-                                   [(constantly []) 10]]))
+                                   [(constantly []) (scaled-empty-weight 10)]]))
           children (f rect)]
       (map #(assoc % :radius 2)
            children))))
@@ -339,15 +389,19 @@
 
 (defn- make-direct-children [rect]
   (let [[w h] (:dim rect)
-        is-vert (> h w)]
+        is-vert (> h w)
+        [fav unf] (direction-weights cut-direction-bias)]
     (cond
       (and (<= w 1) (<= h 1)) (or (:children rect) [])
       (<= w 1) (horz-children rect)
       (<= h 1) (vert-children rect)
-      is-vert (weighted-selection [[(horz-children rect) 10]
-                                   [(vert-children rect) 1]])
-      :else (weighted-selection [[(horz-children rect) 1]
-                                 [(vert-children rect) 10]]))))
+      ;; is-vert: tall rect -- short-axis cut means horz-children
+      ;; (horizontal stripes). At bias > 0 horz is favored; at bias < 0
+      ;; vert-children (long-axis vertical mullions) gets the bigger weight.
+      is-vert (weighted-selection [[(horz-children rect) fav]
+                                   [(vert-children rect) unf]])
+      :else (weighted-selection [[(horz-children rect) unf]
+                                 [(vert-children rect) fav]]))))
 
 (defn- with-some-direct-children [rect]
   (let [children (make-direct-children rect)]
@@ -542,7 +596,9 @@
 (s/fdef generate-pane
   :args (s/cat :dimensions ::dim :opts (s/keys* :opt-un [::seed ::palette]))
   :ret ::pane)
-(defn generate-pane [dimensions & {:keys [seed palette]}]
+(defn generate-pane [dimensions & {:keys [seed palette
+                                           empty-weight-scale divisor-bias
+                                           cut-direction-bias]}]
   "Outputs a kinder-symphony work. Demands dimensions in the form
    of [w h] -- we refuse to generate random dimensions.
    Other parameters are optional.
@@ -551,9 +607,18 @@
         _ (set-random-seed! seed)
         ;; Always select a palette, so that seed is deterministic
         default-palette (rand-nth palettes)
-        palette (or palette default-palette)]
-    (binding [palette palette
-              seed-rect {:dim dimensions :radius 0}]
+        chosen-palette (or palette default-palette)
+        ;; Fall through to whatever's currently bound so outer callers
+        ;; (web.clj / tests) can `binding` these around a make-pane call
+        ;; without having to thread kwargs through every wrapper.
+        ews (or empty-weight-scale kinder.core/empty-weight-scale)
+        dbias (or divisor-bias kinder.core/divisor-bias)
+        cbias (or cut-direction-bias kinder.core/cut-direction-bias)]
+    (binding [kinder.core/palette             chosen-palette
+              seed-rect                       {:dim dimensions :radius 0}
+              kinder.core/empty-weight-scale  (double ews)
+              kinder.core/divisor-bias        (double dbias)
+              kinder.core/cut-direction-bias  (double cbias)]
       (let [rect (some-rect dimensions)
             circles (some-circles rect)]
         {:rect    rect
@@ -636,19 +701,29 @@
   remain, the mutation loop exits early.
 
   Options (all have defaults):
-    :n-mutations  how many subtrees to regenerate per panel   (default 2)
-    :min-depth    shallowest mutatable depth (1 skips root)   (default 1)
-    :max-depth    deepest mutatable depth                     (default 4)
-    :min-dim      min(width, height) required to mutate       (default 3)"
+    :n-mutations          how many subtrees to regenerate per panel   (default 20)
+    :min-depth            shallowest mutatable depth (1 skips root)   (default 1)
+    :max-depth            deepest mutatable depth                     (default 4)
+    :min-dim              min(width, height) required to mutate       (default 3)
+    :empty-weight-scale   multiplier on stop-weight in subdivision    (default 1.0)
+    :divisor-bias         divisor-selection exponent                  (default 1.0)
+    :cut-direction-bias   exponent shaping short-axis cut preference  (default 1.0)"
   [base-pane seed pal
-   {:keys [n-mutations min-depth max-depth min-dim]
-    :or   {n-mutations 2
-           min-depth   1
-           max-depth   4
-           min-dim     3}}]
+   {:keys [n-mutations min-depth max-depth min-dim
+           empty-weight-scale divisor-bias cut-direction-bias]
+    :or   {n-mutations         20
+           min-depth           1
+           max-depth           4
+           min-dim             3}}]
   (set-random-seed! seed)
-  (binding [palette   (or pal palette)
-            seed-rect {:dim (:dim base-pane) :radius 0}]
+  (let [ews   (or empty-weight-scale kinder.core/empty-weight-scale)
+        dbias (or divisor-bias kinder.core/divisor-bias)
+        cbias (or cut-direction-bias kinder.core/cut-direction-bias)]
+    (binding [palette                         (or pal palette)
+              seed-rect                       {:dim (:dim base-pane) :radius 0}
+              kinder.core/empty-weight-scale  (double ews)
+              kinder.core/divisor-bias        (double dbias)
+              kinder.core/cut-direction-bias  (double cbias)]
     (let [filter-opts {:min-depth min-depth :max-depth max-depth :min-dim min-dim}]
       (loop [root      (:rect base-pane)
              remaining n-mutations
@@ -663,7 +738,7 @@
                    :circles (some-circles root))
             (let [target (rand-nth candidates)
                   root'  (replace-by-id root (:id target) with-random-children)]
-              (recur root' (dec remaining) (conj used-ids (:id target))))))))))
+              (recur root' (dec remaining) (conj used-ids (:id target)))))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Coordinated circles (for triptych-variation)

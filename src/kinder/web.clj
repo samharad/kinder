@@ -16,10 +16,12 @@
 
 (def ^:private defaults
   {:width 30 :height 70 :unit 10 :stroke-weight 0.2 :palette "kinder" :gap 6
+   ;; Subdivision density knobs (all modes) -- see kinder.core
+   :empty-weight-scale 1.0 :divisor-bias 1.0 :cut-direction-bias 1.0
    ;; triptych-variation defaults -- see kinder.core/mutate-pane for semantics
-   :mutations 2 :min-depth 1 :max-depth 4 :min-dim 3
+   :mutations 20 :min-depth 1 :max-depth 4 :min-dim 3
    ;; coordinated-circles defaults -- see kinder.core/coordinated-circles
-   :coordinated-circles false
+   :coordinated-circles true
    :circle-count 8 :jitter-along 0.3 :jitter-perp 0.2
    :amplitude 0.25 :frequency 1.0
    ;; Dev overlay: draws the curve as a faint dashed line
@@ -87,12 +89,19 @@
 (defn- build [params]
   (locking gen-lock
     (let [seed   (or (:seed params) (random-seed))
-          mode   (get modes (:mode params) "single")
+          mode   (get modes (:mode params) "triptych-variation")
           params (merge defaults params {:seed seed :mode mode})
-          body   (case mode
-                   "triptych-variation"          (render-triptych-variation params)
-                   ("triptych" "triptych-equal") (render-triptych params)
-                   (render-single params))]
+          ;; Bind the subdivision density knobs here so every render path
+          ;; (single/triptych/variation → make-pane → generate-pane →
+          ;; mutate-pane) sees the caller's values without needing every
+          ;; wrapper to thread them as kwargs.
+          body   (binding [core/empty-weight-scale (double (:empty-weight-scale params))
+                           core/divisor-bias       (double (:divisor-bias params))
+                           core/cut-direction-bias (double (:cut-direction-bias params))]
+                   (case mode
+                     "triptych-variation"          (render-triptych-variation params)
+                     ("triptych" "triptych-equal") (render-triptych params)
+                     (render-single params)))]
       ;; Return seed as a string: a Clojure long can exceed JS Number's
       ;; 2^53 safe-integer range, and a lossy round-trip would re-seed to
       ;; a nearby long, producing a different image on re-submission.
@@ -168,25 +177,30 @@
   (when (and (some? v) (not (str/blank? (str v))))
     (contains? #{"true" "1" "on" "yes"} (str/lower-case (str v)))))
 
-(defn- coerce [{:keys [mode seed gap mutations min-depth max-depth min-dim
+(defn- coerce [{:keys [mode seed gap
+                       empty-weight-scale divisor-bias cut-direction-bias
+                       mutations min-depth max-depth min-dim
                        coordinated-circles circle-count
                        jitter-along jitter-perp amplitude frequency show-curve]
                 :as params}]
   (cond-> {}
-    mode                              (assoc :mode mode)
-    (parse-long-opt seed)             (assoc :seed (parse-long-opt seed))
-    (parse-double-opt gap)            (assoc :gap (parse-double-opt gap))
-    (parse-long-opt mutations)        (assoc :mutations (parse-long-opt mutations))
-    (parse-long-opt min-depth)        (assoc :min-depth (parse-long-opt min-depth))
-    (parse-long-opt max-depth)        (assoc :max-depth (parse-long-opt max-depth))
-    (parse-long-opt min-dim)          (assoc :min-dim (parse-long-opt min-dim))
+    mode                                  (assoc :mode mode)
+    (parse-long-opt seed)                 (assoc :seed (parse-long-opt seed))
+    (parse-double-opt gap)                (assoc :gap (parse-double-opt gap))
+    (parse-double-opt empty-weight-scale) (assoc :empty-weight-scale (parse-double-opt empty-weight-scale))
+    (parse-double-opt divisor-bias)       (assoc :divisor-bias (parse-double-opt divisor-bias))
+    (parse-double-opt cut-direction-bias) (assoc :cut-direction-bias (parse-double-opt cut-direction-bias))
+    (parse-long-opt mutations)            (assoc :mutations (parse-long-opt mutations))
+    (parse-long-opt min-depth)            (assoc :min-depth (parse-long-opt min-depth))
+    (parse-long-opt max-depth)            (assoc :max-depth (parse-long-opt max-depth))
+    (parse-long-opt min-dim)              (assoc :min-dim (parse-long-opt min-dim))
     (contains? params :coordinated-circles)
     (assoc :coordinated-circles (boolean (parse-bool-opt coordinated-circles)))
-    (parse-long-opt circle-count)     (assoc :circle-count (parse-long-opt circle-count))
-    (parse-double-opt jitter-along)   (assoc :jitter-along (parse-double-opt jitter-along))
-    (parse-double-opt jitter-perp)    (assoc :jitter-perp (parse-double-opt jitter-perp))
-    (parse-double-opt amplitude)      (assoc :amplitude (parse-double-opt amplitude))
-    (parse-double-opt frequency)      (assoc :frequency (parse-double-opt frequency))
+    (parse-long-opt circle-count)         (assoc :circle-count (parse-long-opt circle-count))
+    (parse-double-opt jitter-along)       (assoc :jitter-along (parse-double-opt jitter-along))
+    (parse-double-opt jitter-perp)        (assoc :jitter-perp (parse-double-opt jitter-perp))
+    (parse-double-opt amplitude)          (assoc :amplitude (parse-double-opt amplitude))
+    (parse-double-opt frequency)          (assoc :frequency (parse-double-opt frequency))
     (contains? params :show-curve)
     (assoc :show-curve (boolean (parse-bool-opt show-curve)))))
 

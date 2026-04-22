@@ -25,13 +25,29 @@
     :validate [#(contains? palette-map %) "Must be kinder, red, or orange"]]
    ["-o" "--out PATH"     "Output SVG path (single piece only)"]
    ["-n" "--count INT"    "Number of pieces to generate"   :default 1   :parse-fn #(Integer/parseInt %)]
-   ["-l" "--layout NAME"  "Layout: single | triptych | triptych-equal | triptych-variation" :default "single"
+   ["-l" "--layout NAME"  "Layout: single | triptych | triptych-equal | triptych-variation" :default "triptych-variation"
     :validate [layouts "Must be single, triptych, triptych-equal, or triptych-variation"]]
+   ;; --- subdivision density (all modes) -----------------------------------
+   ;; Multiplier on the "stop subdividing" weight in every size-branched
+   ;; cond in kinder.core/children. 1.0 preserves current behavior; <1
+   ;; produces fewer empty rects (denser); >1 more empty rects.
+   [nil "--empty-weight-scale NUM" "Multiplier on subdivision stop-weights"
+    :default 1.0 :parse-fn #(Double/parseDouble %)]
+   ;; Exponent on the divisor-selection weighting in horz/vert-even-children.
+   ;; 1.0 preserves current behavior (small divisors favored). 0 = uniform.
+   ;; Negative = large divisors favored (chunkier splits).
+   [nil "--divisor-bias NUM"       "Exponent shaping even-split divisor choice"
+    :default 1.0 :parse-fn #(Double/parseDouble %)]
+   ;; Exponent on short-axis-cut preference in make-direct-children.
+   ;; 1.0 = current 10:1 bias. 0 = 50/50. Negative flips -- long-axis
+   ;; cuts favored (vertical mullions on tall panes).
+   [nil "--cut-direction-bias NUM" "Exponent shaping short-axis cut preference"
+    :default 1.0 :parse-fn #(Double/parseDouble %)]
    ;; --- triptych-variation tuning (ignored for other layouts) ---
    ;; How many subtrees to regenerate per panel. 0 gives identical panels;
    ;; higher values lose the family resemblance.
    [nil "--mutations INT" "Subtrees to regenerate per panel (triptych-variation)"
-    :default 2 :parse-fn #(Integer/parseInt %)]
+    :default 20 :parse-fn #(Integer/parseInt %)]
    ;; Shallowest depth a mutation can target. 1 excludes the root (which would
    ;; just produce an independent panel).
    [nil "--min-depth INT" "Shallowest mutatable depth (triptych-variation)"
@@ -48,7 +64,8 @@
    ;; When on, replaces each panel's independent circles with circles sampled
    ;; along a shared curve spanning the triptych. Curve angle and phase are
    ;; randomized per seed; amplitude/frequency below shape the wave.
-   [nil "--coordinated-circles" "Place circles along a shared curve (triptych-variation)"]
+   [nil "--[no-]coordinated-circles" "Place circles along a shared curve (triptych-variation). Default on."
+    :default true]
    [nil "--circle-count INT"    "Total circles across the triptych"
     :default 8 :parse-fn #(Integer/parseInt %)]
    [nil "--jitter-along NUM"    "Along-curve wander, fraction of spacing"
@@ -179,15 +196,20 @@
           (System/exit 1))
 
       :else
-      (case (:layout options)
-        "triptych"           (generate-triptych options (:seed options) 2)
-        "triptych-equal"     (generate-triptych options (:seed options) 1)
-        "triptych-variation" (generate-variation-triptych options (:seed options))
-        "single"
-        (let [{:keys [seed count]} options
-              n (if (and seed (> count 1)) 1 count)]
-          (when (and seed (> count 1))
-            (println "Warning: --seed ignores --count; generating one piece"))
-          (dotimes [i n]
-            (generate-one options (when (zero? i) seed)))
-          (System/exit 0))))))
+      ;; Bind the density knobs once at the CLI entry so every generate
+      ;; path below (make-pane → generate-pane → mutate-pane) sees them.
+      (binding [core/empty-weight-scale (double (:empty-weight-scale options))
+                core/divisor-bias       (double (:divisor-bias options))
+                core/cut-direction-bias (double (:cut-direction-bias options))]
+        (case (:layout options)
+          "triptych"           (generate-triptych options (:seed options) 2)
+          "triptych-equal"     (generate-triptych options (:seed options) 1)
+          "triptych-variation" (generate-variation-triptych options (:seed options))
+          "single"
+          (let [{:keys [seed count]} options
+                n (if (and seed (> count 1)) 1 count)]
+            (when (and seed (> count 1))
+              (println "Warning: --seed ignores --count; generating one piece"))
+            (dotimes [i n]
+              (generate-one options (when (zero? i) seed)))
+            (System/exit 0)))))))
