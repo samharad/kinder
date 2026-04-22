@@ -702,7 +702,7 @@
 
   Options (all have defaults):
     :n-mutations          how many subtrees to regenerate per panel   (default 20)
-    :min-depth            shallowest mutatable depth (1 skips root)   (default 1)
+    :min-depth            shallowest mutatable depth (1 skips root)   (default 0)
     :max-depth            deepest mutatable depth                     (default 4)
     :min-dim              min(width, height) required to mutate       (default 3)
     :empty-weight-scale   multiplier on stop-weight in subdivision    (default 1.0)
@@ -712,7 +712,7 @@
    {:keys [n-mutations min-depth max-depth min-dim
            empty-weight-scale divisor-bias cut-direction-bias]
     :or   {n-mutations         20
-           min-depth           1
+           min-depth           0
            max-depth           4
            min-dim             3}}]
   (set-random-seed! seed)

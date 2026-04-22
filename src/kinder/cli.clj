@@ -55,7 +55,7 @@
    ;; Shallowest depth a mutation can target. 1 excludes the root (which would
    ;; just produce an independent panel).
    [nil "--min-depth INT" "Shallowest mutatable depth (triptych-variation)"
-    :default 1 :parse-fn #(Integer/parseInt %)]
+    :default 0 :parse-fn #(Integer/parseInt %)]
    ;; Deepest depth a mutation can target. Smaller values = bigger visible
    ;; changes; larger values = subtler local changes.
    [nil "--max-depth INT" "Deepest mutatable depth (triptych-variation)"

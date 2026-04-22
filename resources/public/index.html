@@ -220,8 +220,8 @@
     <label title="Subtrees to regenerate per panel. 0 = identical panels; too many = panels drift apart.">
       mutations: <input type="number" id="mutations" value="20" min="0" step="1" style="width: 4em;">
     </label>
-    <label title="Shallowest mutation depth. 1 excludes the root (which would make panels fully independent).">
-      min-depth: <input type="number" id="min-depth" value="1" min="1" step="1" style="width: 4em;">
+    <label title="Shallowest mutation depth. 0 allows the root as a target (panel becomes fully independent from the base if root is picked). 1 excludes the root so mutations are always localized.">
+      min-depth: <input type="number" id="min-depth" value="0" min="0" step="1" style="width: 4em;">
     </label>
     <label title="Deepest mutation depth. Smaller values = bigger visible changes; larger = subtler.">
       max-depth: <input type="number" id="max-depth" value="4" min="1" step="1" style="width: 4em;">
@@ -330,7 +330,7 @@ function currentSubdivisionParams() {
 function currentVariationParams() {
   return {
     mutations: intValue(mutationsEl, 20),
-    'min-depth': intValue(minDepthEl, 1),
+    'min-depth': intValue(minDepthEl, 0),
     'max-depth': intValue(maxDepthEl, 4),
     'min-dim': intValue(minDimEl, 3),
   };

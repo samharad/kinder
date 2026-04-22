@@ -19,7 +19,7 @@
    ;; Subdivision density knobs (all modes) -- see kinder.core
    :empty-weight-scale 1.0 :divisor-bias 1.0 :cut-direction-bias 1.0
    ;; triptych-variation defaults -- see kinder.core/mutate-pane for semantics
-   :mutations 20 :min-depth 1 :max-depth 4 :min-dim 3
+   :mutations 20 :min-depth 0 :max-depth 4 :min-dim 3
    ;; coordinated-circles defaults -- see kinder.core/coordinated-circles
    :coordinated-circles true
    :circle-count 8 :jitter-along 0.3 :jitter-perp 0.2
