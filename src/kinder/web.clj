@@ -18,6 +18,7 @@
   {:width 30 :height 70 :unit 10 :stroke-weight 0.2 :palette "kinder" :gap 6
    ;; Subdivision density knobs (all modes) -- see kinder.core
    :empty-weight-scale 1.0 :divisor-bias 1.0 :cut-direction-bias 1.0
+   :corner-radius 2.0
    ;; triptych-variation defaults -- see kinder.core/mutate-pane for semantics
    :mutations 20 :min-depth 0 :max-depth 4 :min-dim 3
    ;; coordinated-circles defaults -- see kinder.core/coordinated-circles
@@ -97,7 +98,8 @@
           ;; wrapper to thread them as kwargs.
           body   (binding [core/empty-weight-scale (double (:empty-weight-scale params))
                            core/divisor-bias       (double (:divisor-bias params))
-                           core/cut-direction-bias (double (:cut-direction-bias params))]
+                           core/cut-direction-bias (double (:cut-direction-bias params))
+                           core/corner-radius      (double (:corner-radius params))]
                    (case mode
                      "triptych-variation"          (render-triptych-variation params)
                      ("triptych" "triptych-equal") (render-triptych params)
@@ -177,8 +179,9 @@
   (when (and (some? v) (not (str/blank? (str v))))
     (contains? #{"true" "1" "on" "yes"} (str/lower-case (str v)))))
 
-(defn- coerce [{:keys [mode seed gap stroke-weight
+(defn- coerce [{:keys [mode seed width height unit gap stroke-weight
                        empty-weight-scale divisor-bias cut-direction-bias
+                       corner-radius
                        mutations min-depth max-depth min-dim
                        coordinated-circles circle-count
                        jitter-along jitter-perp amplitude frequency show-curve]
@@ -186,11 +189,15 @@
   (cond-> {}
     mode                                  (assoc :mode mode)
     (parse-long-opt seed)                 (assoc :seed (parse-long-opt seed))
+    (parse-long-opt width)                (assoc :width (parse-long-opt width))
+    (parse-long-opt height)               (assoc :height (parse-long-opt height))
+    (parse-long-opt unit)                 (assoc :unit (parse-long-opt unit))
     (parse-double-opt gap)                (assoc :gap (parse-double-opt gap))
     (parse-double-opt stroke-weight)      (assoc :stroke-weight (parse-double-opt stroke-weight))
     (parse-double-opt empty-weight-scale) (assoc :empty-weight-scale (parse-double-opt empty-weight-scale))
     (parse-double-opt divisor-bias)       (assoc :divisor-bias (parse-double-opt divisor-bias))
     (parse-double-opt cut-direction-bias) (assoc :cut-direction-bias (parse-double-opt cut-direction-bias))
+    (parse-double-opt corner-radius)      (assoc :corner-radius (parse-double-opt corner-radius))
     (parse-long-opt mutations)            (assoc :mutations (parse-long-opt mutations))
     (parse-long-opt min-depth)            (assoc :min-depth (parse-long-opt min-depth))
     (parse-long-opt max-depth)            (assoc :max-depth (parse-long-opt max-depth))

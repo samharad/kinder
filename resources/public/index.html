@@ -192,11 +192,23 @@
     <label title="Three equal-width panes that share a base skeleton, each with localized subtree mutations. Reveals the variation + coordinated-circles controls below.">
       <input type="radio" name="mode" value="triptych-variation" checked> triptych (variation)
     </label>
+    <label title="Panel width in abstract canvas units. Changes the composition: a different width drives different subdivision choices, so re-generating with the same seed at a new width yields a different image. In triptych modes this is the width of each side panel.">
+      width: <input type="number" id="width" value="30" min="1" step="1" style="width: 5em;">
+    </label>
+    <label title="Panel height in abstract canvas units. Like width, this changes the composition, not just the framing.">
+      height: <input type="number" id="height" value="70" min="1" step="1" style="width: 5em;">
+    </label>
+    <label title="Pixels per canvas unit. Pure rescale: same seed + same width/height at a new unit produces the identically-composed image at a different rendered size.">
+      unit: <input type="number" id="unit" value="10" min="1" step="1" style="width: 5em;">
+    </label>
     <label title="Gap in units between triptych panels. Ignored in single mode.">
       gap: <input type="number" id="gap" value="6" min="0" step="0.5" style="width: 5em;">
     </label>
     <label title="Border (lead) thickness in canvas units. 0.2 ≈ thin pencil line; 0.5+ gives a stained-glass leaded look. Heavier weights make tiny rects merge into solid black.">
       lead: <input type="number" id="stroke-weight" value="0.2" min="0" step="0.05" style="width: 5em;">
+    </label>
+    <label title="Corner radius of each subdivided cell, in output pixels. 0 = square corners; 2 = current behavior; larger values give a softer/bubbly look. The outer pane frame stays square regardless.">
+      corner: <input type="number" id="corner-radius" value="2" min="0" step="0.5" style="width: 5em;">
     </label>
     <button id="generate" type="button" title="Generate a new image with a fresh random seed. Keyboard: Enter.">generate (enter)</button>
     <button id="save" type="button" title="Save the current image to output/svg/ with a timestamped filename. Keyboard: s.">save (s)</button>
@@ -275,8 +287,12 @@ const viewport = document.getElementById('viewport');
 const canvas = document.getElementById('canvas');
 const seedEl = document.getElementById('seed');
 const toastEl = document.getElementById('toast');
+const widthEl = document.getElementById('width');
+const heightEl = document.getElementById('height');
+const unitEl = document.getElementById('unit');
 const gapEl = document.getElementById('gap');
 const strokeWeightEl = document.getElementById('stroke-weight');
+const cornerRadiusEl = document.getElementById('corner-radius');
 const variationParamsEl = document.getElementById('variation-params');
 const coordinatedParamsEl = document.getElementById('coordinated-params');
 const emptyWeightScaleEl = document.getElementById('empty-weight-scale');
@@ -309,6 +325,14 @@ function currentStrokeWeight() {
   return isNaN(v) ? 0.2 : v;
 }
 
+function currentDimensions() {
+  return {
+    width: intValue(widthEl, 30),
+    height: intValue(heightEl, 70),
+    unit: intValue(unitEl, 10),
+  };
+}
+
 function intValue(el, fallback) {
   const v = parseInt(el.value, 10);
   return isNaN(v) ? fallback : v;
@@ -324,6 +348,7 @@ function currentSubdivisionParams() {
     'empty-weight-scale': floatValue(emptyWeightScaleEl, 1.0),
     'divisor-bias': floatValue(divisorBiasEl, 1.0),
     'cut-direction-bias': floatValue(cutDirectionBiasEl, 1.0),
+    'corner-radius': floatValue(cornerRadiusEl, 2.0),
   };
 }
 
@@ -364,6 +389,9 @@ async function generate({ reuseSeed = false } = {}) {
   const mode = currentMode();
   const url = new URL('/generate', window.location.origin);
   url.searchParams.set('mode', mode);
+  for (const [k, v] of Object.entries(currentDimensions())) {
+    url.searchParams.set(k, String(v));
+  }
   url.searchParams.set('gap', String(currentGap()));
   url.searchParams.set('stroke-weight', String(currentStrokeWeight()));
   // Subdivision density knobs apply in every mode.
@@ -447,6 +475,7 @@ viewport.addEventListener('dblclick', resetView);
 async function save() {
   if (state.seed == null) return;
   const payload = { seed: state.seed, mode: state.mode,
+                    ...currentDimensions(),
                     gap: currentGap(), 'stroke-weight': currentStrokeWeight(),
                     ...currentSubdivisionParams() };
   if (state.mode === 'triptych-variation') {
@@ -484,7 +513,8 @@ strokeWeightEl.addEventListener('change', debouncedGenerate);
 strokeWeightEl.addEventListener('input', debouncedGenerate);
 // Param inputs: debounce so holding an arrow key doesn't fire dozens of
 // fetches (each of which would race on the server's global RNG).
-[emptyWeightScaleEl, divisorBiasEl, cutDirectionBiasEl,
+[widthEl, heightEl, unitEl, cornerRadiusEl,
+ emptyWeightScaleEl, divisorBiasEl, cutDirectionBiasEl,
  mutationsEl, minDepthEl, maxDepthEl, minDimEl,
  coordinatedEl, circleCountEl, jitterAlongEl, jitterPerpEl,
  amplitudeEl, frequencyEl, showCurveEl].forEach((el) => {

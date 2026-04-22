@@ -109,6 +109,12 @@
   on tall panes, a la Frank Lloyd Wright)."}
   cut-direction-bias 1.0)
 
+(def ^:dynamic ^{:doc "Corner radius (in output pixels) applied to every
+  subdivided cell rect. The outer pane frame stays rectangular regardless.
+  Default 2 preserves current behavior; 0 = square corners everywhere;
+  larger values = more pronounced rounding."}
+  corner-radius 2.0)
+
 (defn- direction-weights
   "Returns a [favored unfavored] pair of integer weights shaped by
   `cut-direction-bias`. Always normalizes so both weights are ≥ 1."
@@ -374,7 +380,7 @@
                                    [even 2]
                                    [(constantly []) (scaled-empty-weight 10)]]))
           children (f rect)]
-      (map #(assoc % :radius 2)
+      (map #(assoc % :radius corner-radius)
            children))))
 
 (def horz-children (children horz-sym-children
@@ -598,7 +604,7 @@
   :ret ::pane)
 (defn generate-pane [dimensions & {:keys [seed palette
                                            empty-weight-scale divisor-bias
-                                           cut-direction-bias]}]
+                                           cut-direction-bias corner-radius]}]
   "Outputs a kinder-symphony work. Demands dimensions in the form
    of [w h] -- we refuse to generate random dimensions.
    Other parameters are optional.
@@ -613,12 +619,14 @@
         ;; without having to thread kwargs through every wrapper.
         ews (or empty-weight-scale kinder.core/empty-weight-scale)
         dbias (or divisor-bias kinder.core/divisor-bias)
-        cbias (or cut-direction-bias kinder.core/cut-direction-bias)]
+        cbias (or cut-direction-bias kinder.core/cut-direction-bias)
+        cr (or corner-radius kinder.core/corner-radius)]
     (binding [kinder.core/palette             chosen-palette
               seed-rect                       {:dim dimensions :radius 0}
               kinder.core/empty-weight-scale  (double ews)
               kinder.core/divisor-bias        (double dbias)
-              kinder.core/cut-direction-bias  (double cbias)]
+              kinder.core/cut-direction-bias  (double cbias)
+              kinder.core/corner-radius       (double cr)]
       (let [rect (some-rect dimensions)
             circles (some-circles rect)]
         {:rect    rect
@@ -710,7 +718,7 @@
     :cut-direction-bias   exponent shaping short-axis cut preference  (default 1.0)"
   [base-pane seed pal
    {:keys [n-mutations min-depth max-depth min-dim
-           empty-weight-scale divisor-bias cut-direction-bias]
+           empty-weight-scale divisor-bias cut-direction-bias corner-radius]
     :or   {n-mutations         20
            min-depth           0
            max-depth           4
@@ -718,12 +726,14 @@
   (set-random-seed! seed)
   (let [ews   (or empty-weight-scale kinder.core/empty-weight-scale)
         dbias (or divisor-bias kinder.core/divisor-bias)
-        cbias (or cut-direction-bias kinder.core/cut-direction-bias)]
+        cbias (or cut-direction-bias kinder.core/cut-direction-bias)
+        cr    (or corner-radius kinder.core/corner-radius)]
     (binding [palette                         (or pal palette)
               seed-rect                       {:dim (:dim base-pane) :radius 0}
               kinder.core/empty-weight-scale  (double ews)
               kinder.core/divisor-bias        (double dbias)
-              kinder.core/cut-direction-bias  (double cbias)]
+              kinder.core/cut-direction-bias  (double cbias)
+              kinder.core/corner-radius       (double cr)]
     (let [filter-opts {:min-depth min-depth :max-depth max-depth :min-dim min-dim}]
       (loop [root      (:rect base-pane)
              remaining n-mutations

@@ -47,6 +47,11 @@
    ;; cuts favored (vertical mullions on tall panes).
    [nil "--cut-direction-bias NUM" "Exponent shaping short-axis cut preference"
     :default 1.0 :parse-fn #(Double/parseDouble %)]
+   ;; Corner radius in output pixels applied to each subdivided cell.
+   ;; Outer pane frame stays square regardless. 0 = square corners
+   ;; everywhere; larger = more pronounced rounding.
+   [nil "--corner-radius NUM" "Cell corner radius in output pixels"
+    :default 2.0 :parse-fn #(Double/parseDouble %)]
    ;; --- triptych-variation tuning (ignored for other layouts) ---
    ;; How many subtrees to regenerate per panel. 0 gives identical panels;
    ;; higher values lose the family resemblance.
@@ -201,7 +206,8 @@
       ;; path below (make-pane → generate-pane → mutate-pane) sees them.
       (binding [core/empty-weight-scale (double (:empty-weight-scale options))
                 core/divisor-bias       (double (:divisor-bias options))
-                core/cut-direction-bias (double (:cut-direction-bias options))]
+                core/cut-direction-bias (double (:cut-direction-bias options))
+                core/corner-radius      (double (:corner-radius options))]
         (case (:layout options)
           "triptych"           (generate-triptych options (:seed options) 2)
           "triptych-equal"     (generate-triptych options (:seed options) 1)
