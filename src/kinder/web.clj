@@ -177,7 +177,7 @@
   (when (and (some? v) (not (str/blank? (str v))))
     (contains? #{"true" "1" "on" "yes"} (str/lower-case (str v)))))
 
-(defn- coerce [{:keys [mode seed gap
+(defn- coerce [{:keys [mode seed gap stroke-weight
                        empty-weight-scale divisor-bias cut-direction-bias
                        mutations min-depth max-depth min-dim
                        coordinated-circles circle-count
@@ -187,6 +187,7 @@
     mode                                  (assoc :mode mode)
     (parse-long-opt seed)                 (assoc :seed (parse-long-opt seed))
     (parse-double-opt gap)                (assoc :gap (parse-double-opt gap))
+    (parse-double-opt stroke-weight)      (assoc :stroke-weight (parse-double-opt stroke-weight))
     (parse-double-opt empty-weight-scale) (assoc :empty-weight-scale (parse-double-opt empty-weight-scale))
     (parse-double-opt divisor-bias)       (assoc :divisor-bias (parse-double-opt divisor-bias))
     (parse-double-opt cut-direction-bias) (assoc :cut-direction-bias (parse-double-opt cut-direction-bias))

@@ -27,6 +27,10 @@
    ["-n" "--count INT"    "Number of pieces to generate"   :default 1   :parse-fn #(Integer/parseInt %)]
    ["-l" "--layout NAME"  "Layout: single | triptych | triptych-equal | triptych-variation" :default "triptych-variation"
     :validate [layouts "Must be single, triptych, triptych-equal, or triptych-variation"]]
+   ;; Border / "lead" thickness in canvas units. At unit=10, 0.2 = 2px,
+   ;; 0.5 = 5px, etc. Heavier values give a stained-glass / leaded look.
+   [nil "--stroke-weight NUM" "Border line thickness in canvas units"
+    :default 0.2 :parse-fn #(Double/parseDouble %)]
    ;; --- subdivision density (all modes) -----------------------------------
    ;; Multiplier on the "stop subdividing" weight in every size-branched
    ;; cond in kinder.core/children. 1.0 preserves current behavior; <1
@@ -106,8 +110,7 @@
   (when open? (sh "open" out-file)))
 
 (defn- generate-one [opts seed]
-  (let [{:keys [width height unit palette out open]} opts
-        stroke-weight 0.2
+  (let [{:keys [width height unit palette out open stroke-weight]} opts
         pal      (get palette-map palette)
         seed     (or seed (-> (Random.) .nextLong))
         pane     (make-pane [width height] seed pal)
@@ -117,8 +120,7 @@
     (finish! out-file open)))
 
 (defn- generate-triptych [opts seed center-multiplier]
-  (let [{:keys [width height unit palette out open]} opts
-        stroke-weight 0.2
+  (let [{:keys [width height unit palette out open stroke-weight]} opts
         gap      6
         pal      (get palette-map palette)
         seed     (or seed (-> (Random.) .nextLong))
@@ -157,10 +159,9 @@
   "Three panels that share a base skeleton, each with localized subtree
   mutations driven by sub-seeds derived from the master seed."
   [opts seed]
-  (let [{:keys [width height unit palette out open
+  (let [{:keys [width height unit palette out open stroke-weight
                 mutations min-depth max-depth min-dim
                 coordinated-circles]} opts
-        stroke-weight 0.2
         gap      6
         pal      (get palette-map palette)
         seed     (or seed (-> (Random.) .nextLong))

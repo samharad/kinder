@@ -195,6 +195,9 @@
     <label title="Gap in units between triptych panels. Ignored in single mode.">
       gap: <input type="number" id="gap" value="6" min="0" step="0.5" style="width: 5em;">
     </label>
+    <label title="Border (lead) thickness in canvas units. 0.2 ≈ thin pencil line; 0.5+ gives a stained-glass leaded look. Heavier weights make tiny rects merge into solid black.">
+      lead: <input type="number" id="stroke-weight" value="0.2" min="0" step="0.05" style="width: 5em;">
+    </label>
     <button id="generate" type="button" title="Generate a new image with a fresh random seed. Keyboard: Enter.">generate (enter)</button>
     <button id="save" type="button" title="Save the current image to output/svg/ with a timestamped filename. Keyboard: s.">save (s)</button>
     <button id="reset" type="button" title="Reset pan and zoom on the preview. Keyboard: r or 0. Double-click the preview does the same.">reset view (r)</button>
@@ -273,6 +276,7 @@ const canvas = document.getElementById('canvas');
 const seedEl = document.getElementById('seed');
 const toastEl = document.getElementById('toast');
 const gapEl = document.getElementById('gap');
+const strokeWeightEl = document.getElementById('stroke-weight');
 const variationParamsEl = document.getElementById('variation-params');
 const coordinatedParamsEl = document.getElementById('coordinated-params');
 const emptyWeightScaleEl = document.getElementById('empty-weight-scale');
@@ -298,6 +302,11 @@ function currentMode() {
 function currentGap() {
   const v = parseFloat(gapEl.value);
   return isNaN(v) ? 6 : v;
+}
+
+function currentStrokeWeight() {
+  const v = parseFloat(strokeWeightEl.value);
+  return isNaN(v) ? 0.2 : v;
 }
 
 function intValue(el, fallback) {
@@ -356,6 +365,7 @@ async function generate({ reuseSeed = false } = {}) {
   const url = new URL('/generate', window.location.origin);
   url.searchParams.set('mode', mode);
   url.searchParams.set('gap', String(currentGap()));
+  url.searchParams.set('stroke-weight', String(currentStrokeWeight()));
   // Subdivision density knobs apply in every mode.
   for (const [k, v] of Object.entries(currentSubdivisionParams())) {
     url.searchParams.set(k, String(v));
@@ -436,7 +446,8 @@ viewport.addEventListener('dblclick', resetView);
 
 async function save() {
   if (state.seed == null) return;
-  const payload = { seed: state.seed, mode: state.mode, gap: currentGap(),
+  const payload = { seed: state.seed, mode: state.mode,
+                    gap: currentGap(), 'stroke-weight': currentStrokeWeight(),
                     ...currentSubdivisionParams() };
   if (state.mode === 'triptych-variation') {
     Object.assign(payload, currentVariationParams(), currentCoordinatedParams());
@@ -469,6 +480,8 @@ document.querySelectorAll('input[name=mode]').forEach((el) => {
   });
 });
 gapEl.addEventListener('change', () => generate({ reuseSeed: true }));
+strokeWeightEl.addEventListener('change', debouncedGenerate);
+strokeWeightEl.addEventListener('input', debouncedGenerate);
 // Param inputs: debounce so holding an arrow key doesn't fire dozens of
 // fetches (each of which would race on the server's global RNG).
 [emptyWeightScaleEl, divisorBiasEl, cutDirectionBiasEl,
