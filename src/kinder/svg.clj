@@ -25,13 +25,13 @@
                 (Math/round (* 255.0 (+ g m)))
                 (Math/round (* 255.0 (+ b m))))))))
 
-(def ^:private neon-pink (hsb->hex [315 100 100]))
+(def ^:private child-bearer-fill "#000000")
 
 (defn- rect-el [{:keys [dim loc color children radius]} unit sw]
   (let [[w h] dim
         [x y] loc
         rx    (or radius 2)
-        fill  (if (not-empty children) neon-pink (hsb->hex color))]
+        fill  (if (not-empty children) child-bearer-fill (hsb->hex color))]
     (format "<rect x=\"%.2f\" y=\"%.2f\" width=\"%.2f\" height=\"%.2f\" rx=\"%.0f\" fill=\"%s\" stroke=\"#000\" stroke-width=\"%.2f\"/>"
             (float (* x unit)) (float (* y unit))
             (float (* w unit)) (float (* h unit))

@@ -40,10 +40,10 @@
                             (let [{:keys [dim loc children color radius]} rect
                                   [x y] loc
                                   [w h] dim]
-                              ;; Set child-bearing box color to neon pink so that
-                              ;; we can catch impartial tiling!
+                              ;; Set child-bearing box color to black so that
+                              ;; we can catch impartial tiling.
                               (if (not-empty children)
-                                (q/fill 315 100 100)
+                                (q/fill 0 0 0)
                                 (q/fill color))
                               (q/rect (unit x) (unit y) (unit w) (unit h) (or radius 2))
                               children))
