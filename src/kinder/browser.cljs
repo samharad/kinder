@@ -215,47 +215,89 @@
      (update-seed-display! seed (:mode o))
      (animate-reveal! scene o))))
 
-(defn save-blob! []
+(def ^:private svg-save-types
+  #js [#js {:description "SVG"
+            :accept #js {"image/svg+xml" #js [".svg"]}}])
+
+(defn- save-payloads []
   (when-let [scene (:scene @app-state)]
-    (let [o        (:opts @app-state)
-          svg-str  (layouts/render-scene scene o)
-          blob     (js/Blob. #js [svg-str] #js {:type "image/svg+xml"})
-          url      (js/URL.createObjectURL blob)
-          filename (opts/output-filename (:seed o))
-          a        (.createElement js/document "a")]
-      (set! (.-href a) url)
-      (set! (.-download a) filename)
-      (.. js/document -body (appendChild a))
-      (.click a)
-      (.. js/document -body (removeChild a))
-      (js/setTimeout #(js/URL.revokeObjectURL url) 1000)
-      (show-toast! (str "saved " filename)))))
+    (let [o               (:opts @app-state)
+          share-url       (current-share-url o)
+          filename-base   (opts/output-filename-base (:seed o))
+          artwork-name    (opts/svg-filename filename-base)
+          qr-name         (opts/svg-filename filename-base "-QR-code")
+          qr-opts         (assoc o
+                                 :mode "qr"
+                                 :palette "kinder"
+                                 :text share-url
+                                 :seed (str (:seed o) "/save-qr"))
+          qr-scene        (layouts/generate-scene qr-opts)
+          artwork-svg-str (layouts/render-scene scene o)
+          qr-svg-str      (layouts/render-scene qr-scene qr-opts)]
+      [{:filename artwork-name :svg-str artwork-svg-str}
+       {:filename qr-name :svg-str qr-svg-str}])))
+
+(defn- download-svg! [{:keys [filename svg-str]}]
+  (let [blob (js/Blob. #js [svg-str] #js {:type "image/svg+xml"})
+        url  (js/URL.createObjectURL blob)
+        a    (.createElement js/document "a")]
+    (set! (.-href a) url)
+    (set! (.-download a) filename)
+    (.. js/document -body (appendChild a))
+    (.click a)
+    (.. js/document -body (removeChild a))
+    (js/setTimeout #(js/URL.revokeObjectURL url) 1000)))
+
+(defn- save-blob! [payloads]
+  (doseq [payload payloads]
+    (download-svg! payload))
+  (let [[artwork qr] payloads]
+    (show-toast! (str "saved " (:filename artwork) " + " (:filename qr)))))
+
+(defn- save-via-picker! [{:keys [filename svg-str]}]
+  (-> (.showSaveFilePicker
+        js/window
+        #js {:suggestedName filename
+             :types         svg-save-types})
+      (.then (fn [handle]
+               (-> (.createWritable handle)
+                   (.then (fn [w]
+                            (-> (.write w svg-str)
+                                (.then #(.close w))))))))))
 
 (defn save!
   "Prefer the native save dialog when available, fall back to blob download."
   []
-  (let [scene (:scene @app-state)
-        o     (:opts @app-state)]
+  (when-let [payloads (save-payloads)]
     (cond
-      (nil? scene) nil
-      (not (and js/window (.-showSaveFilePicker js/window))) (save-blob!)
+      (not (and js/window (.-showSaveFilePicker js/window)))
+      (save-blob! payloads)
+
       :else
-      (let [svg-str (layouts/render-scene scene o)]
-        (-> (.showSaveFilePicker
-              js/window
-              #js {:suggestedName (opts/output-filename (:seed o))
-                   :types #js [#js {:description "SVG"
-                                    :accept #js {"image/svg+xml" #js [".svg"]}}]})
-            (.then (fn [handle]
-                     (-> (.createWritable handle)
-                         (.then (fn [w]
-                                  (-> (.write w svg-str)
-                                      (.then #(.close w))
-                                      (.then #(show-toast! "saved"))))))))
+      (let [[artwork qr] payloads
+            artwork-saved? (atom false)]
+        (-> (save-via-picker! artwork)
+            (.then (fn [_]
+                     (reset! artwork-saved? true)
+                     (save-via-picker! qr)))
+            (.then (fn [_]
+                     (show-toast! (str "saved " (:filename artwork) " + " (:filename qr)))))
             (.catch (fn [err]
-                      (when-not (= (.-name err) "AbortError")
-                        (js/console.warn "save-via-picker failed, falling back" err)
-                        (save-blob!)))))))))
+                      (cond
+                        (= (.-name err) "AbortError")
+                        (show-toast! (if @artwork-saved?
+                                       (str "saved " (:filename artwork) "; QR save cancelled")
+                                       "save cancelled"))
+
+                        @artwork-saved?
+                        (do
+                          (js/console.warn "companion QR save failed" err)
+                          (show-toast! (str "saved " (:filename artwork) "; QR save failed")))
+
+                        :else
+                        (do
+                          (js/console.warn "save-via-picker failed, falling back" err)
+                          (save-blob! payloads))))))))))
 
 (defn copy-share-link! []
   (when-let [o (:opts @app-state)]

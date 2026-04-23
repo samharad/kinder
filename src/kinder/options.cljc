@@ -306,7 +306,19 @@
     (str/replace (str seed) #"[^A-Za-z0-9._-]" "_")
     "noseed"))
 
+(defn output-filename-base
+  "Suggested filename stem for saved SVGs, derived from the seed and current time."
+  [seed]
+  (str (timestamp) "-" (safe-seed seed)))
+
+(defn svg-filename
+  "Attach an optional suffix and the `.svg` extension to a saved filename stem."
+  ([base]
+   (svg-filename base ""))
+  ([base suffix]
+   (str base suffix ".svg")))
+
 (defn output-filename
   "Suggested filename for a saved SVG, derived from the seed and current time."
   [seed]
-  (str (timestamp) "-" (safe-seed seed) ".svg"))
+  (svg-filename (output-filename-base seed)))
