@@ -1,0 +1,65 @@
+name: Pages
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set Up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set Up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Check Out gh-pages Worktree
+        run: |
+          rm -rf .pages-site
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages
+            git worktree add -B gh-pages .pages-site origin/gh-pages
+          else
+            git worktree add --detach .pages-site HEAD
+            git -C .pages-site switch --orphan gh-pages
+            git -C .pages-site rm -rf --ignore-unmatch .
+            find .pages-site -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          fi
+
+      - name: Assemble Published Site
+        run: node scripts/pages-build.mjs --site-dir .pages-site --before "${{ github.event.before }}" --after "${{ github.sha }}" --domain kinder.samadams.dev
+
+      - name: Commit and Push
+        run: |
+          git -C .pages-site config user.name "github-actions[bot]"
+          git -C .pages-site config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git -C .pages-site status --porcelain)" ]; then
+            git -C .pages-site add --all
+            git -C .pages-site commit -m "Deploy pages for ${{ github.sha }}"
+            git -C .pages-site push origin gh-pages
+          fi

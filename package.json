@@ -8,6 +8,7 @@
     "watch:cli": "shadow-cljs watch cli",
     "release:app": "shadow-cljs release app",
     "release:cli": "shadow-cljs release cli",
+    "pages:assemble": "node scripts/pages-build.mjs",
     "serve": "shadow-cljs watch app",
     "cli": "node dist/kinder-cli.js"
   },
