@@ -119,6 +119,41 @@ function rewriteIndexHtml(html, fullSha) {
   return html.replaceAll(sourcePrefix, targetPrefix);
 }
 
+function renderRootRedirectHtml(latestEntry) {
+  const targetPath = latestEntry.url.endsWith("/") ? latestEntry.url : `${latestEntry.url}/`;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kinder</title>
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  (function () {
+    var target = ${JSON.stringify(targetPath)};
+    var next = target + window.location.search + window.location.hash;
+    window.location.replace(next);
+  }());
+</script>
+<meta http-equiv="refresh" content="0; url=${targetPath}">
+<style>
+  body {
+    margin: 0;
+    padding: 24px;
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #fafafa;
+    color: #222;
+  }
+</style>
+</head>
+<body>
+<p>Redirecting to the latest snapshot: <a href="${targetPath}">${targetPath}</a></p>
+</body>
+</html>
+`;
+}
+
 async function loadManifest(siteDir) {
   const manifestPath = path.join(siteDir, "versions.json");
   if (!(await pathExists(manifestPath))) {
@@ -355,10 +390,7 @@ async function main() {
     throw new Error(`latest version ${latestSha} is missing after assembly`);
   }
 
-  await copyFile(
-    path.join(siteDir, latestEntry.short_sha, "index.html"),
-    path.join(siteDir, "index.html"),
-  );
+  await writeFile(path.join(siteDir, "index.html"), renderRootRedirectHtml(latestEntry));
 
   const pruneResult = await pruneToSoftCap(siteDir, manifest, softCapMb * 1024 * 1024);
   markLatest(manifest, latestSha);
