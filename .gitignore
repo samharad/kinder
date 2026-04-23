@@ -4,3 +4,7 @@ output/
 *.iml
 .cpcache/
 .DS_store
+node_modules/
+.shadow-cljs/
+dist/
+public/assets/
