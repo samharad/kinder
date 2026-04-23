@@ -73,7 +73,10 @@
 (defn- read-form []
   (let [from-numbers  (into {} (map (fn [[k id]] [k (val-of id)]) number-inputs))
         from-checkbox (into {} (map (fn [[k id]] [k (checked? id)]) checkbox-inputs))]
-    (merge from-numbers from-checkbox {:mode (current-mode)})))
+    (merge from-numbers
+           from-checkbox
+           {:mode    (current-mode)
+            :palette (val-of "palette")})))
 
 (defn- current-opts [] (opts/normalize (read-form)))
 
@@ -387,6 +390,10 @@
                          (sync-variation-visibility!)
                          (generate! {:reuse-seed? true})))))
 
+(defn- bind-palette! []
+  (.addEventListener (el "palette") "change"
+                     (fn [_] (generate! {:reuse-seed? true}))))
+
 (defn- bind-buttons! []
   (.addEventListener (el "generate") "click" (fn [_] (generate!)))
   (.addEventListener (el "save")     "click" (fn [_] (save!)))
@@ -420,6 +427,7 @@
 (defn init []
   (bind-buttons!)
   (bind-mode-radios!)
+  (bind-palette!)
   (bind-inputs!)
   (bind-view-tabs!)
   (bind-viewport!)

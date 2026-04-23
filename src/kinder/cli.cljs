@@ -15,7 +15,7 @@
    ["-H" "--height HEIGHT"          "Canvas height in units"         :id :height]
    ["-u" "--unit UNIT"              "Pixels per unit"                :id :unit]
    ["-s" "--seed SEED"              "Fix the seed (string)"          :id :seed]
-   ["-p" "--palette NAME"           "Palette: kinder | red | orange" :id :palette]
+   ["-p" "--palette NAME"           "Palette: kinder | anthro-1 | anthro-2" :id :palette]
    ["-o" "--out PATH"               "Output SVG path"                :id :out]
    ["-n" "--count N"                "Number of pieces (single layout)" :id :count]
    ["-l" "--layout NAME"            "Layout: single | triptych | triptych-equal | triptych-variation"

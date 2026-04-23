@@ -6,7 +6,8 @@
 
   ;; Data shapes:
   ;;   :color           ⇒ [h s b]  (3 ints, HSB 0-360/0-100/0-100)
-  ;;   :palette         ⇒ {:main [h s b] :accent [[h s b] ...]}
+  ;;   :palette         ⇒ {:main [h s b] :accent [[h s b] ...]
+  ;;                       :accent-weights [positive-int ...]}
   ;;   :rect            ⇒ {:dim [w h] :loc [x y] :color [h s b]
   ;;                       :assigned-color [h s b] :radius number
   ;;                       :id string :children [rect ...]}
@@ -53,18 +54,23 @@
                               [215, 99, 45]
                               [35, 77, 91]]})
 
-(def red-palette {:main [57, 8, 93]
-                  :accent [[354, 99, 64]]})
+(def anthro-1-palette
+  {:main [57 8 93]
+   :accent [[46 51 92]
+            [15 55 80]
+            [210 48 80]
+            [86 34 55]]
+   :accent-weights [1 2 1 1]})
 
-(def orange-palette {:main [46 27 85]
-                     :accent [[32 94 99]
-                              [174 15 25]
-                              [150 5 17]
-                              [204 5 78]]})
+(def anthro-2-palette
+  {:main [57 8 93]
+   :accent [[46 51 92]
+            [15 55 80]
+            [244 8 86]
+            [160 10 82]]
+   :accent-weights [1 2 1 1]})
 
-(def palettes [kinder-palette
-               #_red-palette
-               #_orange-palette])
+(def palettes [kinder-palette])
 
 (def ^:dynamic palette kinder-palette)
 (def ^:dynamic seed-rect {:dim [0 0]})
@@ -110,7 +116,11 @@
   (:main palette))
 
 (defn- some-accent-color [rng]
-  (rng/rand-nth rng (:accent palette)))
+  (let [accents (:accent palette)
+        weights (:accent-weights palette)]
+    (if (and (seq weights) (= (count accents) (count weights)))
+      (weighted-selection rng (mapv vector accents weights))
+      (rng/rand-nth rng accents))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Coloring

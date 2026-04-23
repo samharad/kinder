@@ -33,7 +33,7 @@
     cursor: grab;
     user-select: none;
     touch-action: none;
-    background: #f0f0f0;
+    background: #fff;
     border: 1px solid #ddd;
   }
   .viewport.panning { cursor: grabbing; }
@@ -154,6 +154,13 @@
     <label><input type="radio" name="mode" value="triptych"> triptych (1:2:1)</label>
     <label><input type="radio" name="mode" value="triptych-equal"> triptych (1:1:1)</label>
     <label><input type="radio" name="mode" value="triptych-variation" checked> triptych (variation)</label>
+    <label>palette:
+      <select id="palette">
+        <option value="kinder" selected>kinder</option>
+        <option value="anthro-1">anthro 1</option>
+        <option value="anthro-2">anthro 2</option>
+      </select>
+    </label>
     <label>width: <input type="number" id="width" value="30" min="1" step="1" style="width: 5em;"></label>
     <label>height: <input type="number" id="height" value="70" min="1" step="1" style="width: 5em;"></label>
     <label>unit: <input type="number" id="unit" value="10" min="1" step="1" style="width: 5em;"></label>

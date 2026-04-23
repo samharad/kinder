@@ -64,7 +64,7 @@
   "Build the panes for the requested mode. Expects a fully-normalized
   options map (see `kinder.options/normalize`) including `:seed`."
   [{:keys [mode width height seed palette coordinated-circles] :as o}]
-  (let [pal (opts/palette-of palette)]
+  (let [pal (opts/palette-of palette seed)]
     (case mode
       "single"
       {:mode  "single"

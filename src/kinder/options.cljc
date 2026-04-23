@@ -7,8 +7,8 @@
 
 (def palettes
   {"kinder" core/kinder-palette
-   "red"    core/red-palette
-   "orange" core/orange-palette})
+   "anthro-1" core/anthro-1-palette
+   "anthro-2" core/anthro-2-palette})
 
 (def layouts #{"single" "triptych" "triptych-equal" "triptych-variation"})
 
@@ -103,8 +103,10 @@
 
 (defn palette-of
   "Resolve a palette name to a palette map. Falls back to the kinder palette."
-  [name]
-  (or (get palettes name) core/kinder-palette))
+  ([name]
+   (palette-of name nil))
+  ([name _seed]
+   (or (get palettes name) core/kinder-palette)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Filename derivation — shared between browser save and Node CLI.
