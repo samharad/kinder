@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kinder</title>
+<style>
+  :root { color-scheme: light; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    margin: 0;
+    padding: 16px;
+    background: #fafafa;
+    color: #222;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .bar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .bar button { padding: 6px 12px; font: inherit; cursor: pointer; }
+  .bar label { cursor: pointer; }
+  .seed {
+    margin-left: auto;
+    color: #888;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+  }
+  .viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    background: #fff;
+    border: 1px solid #ddd;
+  }
+  .viewport.panning { cursor: grabbing; }
+  .canvas { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+  .stage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .stage svg {
+    max-width: 100%;
+    max-height: 100%;
+    height: auto;
+    width: auto;
+    display: block;
+  }
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #222;
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font: 12px ui-monospace, monospace;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .view-tabs { display: flex; gap: 4px; }
+  .view-tabs button {
+    padding: 6px 14px;
+    font: inherit;
+    cursor: pointer;
+    background: #eee;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+  .view-tabs button.active { background: #222; color: #fff; border-color: #222; }
+  .view { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .view[hidden] { display: none; }
+  .gallery {
+    flex: 1;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    padding: 4px;
+    align-content: start;
+  }
+  .gallery .tile {
+    cursor: zoom-in;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+  }
+  .gallery .tile img { max-width: 100%; max-height: 100%; display: block; }
+  .fullscreen {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    cursor: zoom-out;
+  }
+  .fullscreen[hidden] { display: none; }
+  .fullscreen img {
+    max-width: 95vw;
+    max-height: 92vh;
+    display: block;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  }
+  .fullscreen .nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: none;
+    font-size: 32px;
+    padding: 8px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .fullscreen .nav:hover { background: rgba(255,255,255,0.3); }
+  .fullscreen .prev { left: 16px; }
+  .fullscreen .next { right: 16px; }
+  .fullscreen .caption {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ccc;
+    font: 12px ui-monospace, monospace;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div class="view-tabs">
+  <button data-view="generate" class="active" type="button">generate</button>
+  <button data-view="inspiration" type="button">inspiration</button>
+</div>
+<div class="view" id="generate-view">
+  <div class="bar">
+    <span>mode:</span>
+    <label><input type="radio" name="mode" value="single"> single</label>
+    <label><input type="radio" name="mode" value="triptych"> triptych (1:2:1)</label>
+    <label><input type="radio" name="mode" value="triptych-equal"> triptych (1:1:1)</label>
+    <label><input type="radio" name="mode" value="triptych-variation" checked> triptych (variation)</label>
+    <label><input type="radio" name="mode" value="qr"> qr</label>
+    <label>palette:
+      <select id="palette">
+        <option value="kinder" selected>kinder</option>
+        <option value="anthro-1">anthro 1</option>
+        <option value="anthro-2">anthro 2</option>
+        <option value="anthro-3">anthro 3</option>
+      </select>
+    </label>
+    <label>width: <input type="number" id="width" value="30" min="1" step="1" style="width: 5em;"></label>
+    <label>height: <input type="number" id="height" value="70" min="1" step="1" style="width: 5em;"></label>
+    <label>unit: <input type="number" id="unit" value="10" min="1" step="1" style="width: 5em;"></label>
+    <label>gap: <input type="number" id="gap" value="6" min="0" step="0.5" style="width: 5em;"></label>
+    <label>lead: <input type="number" id="stroke-weight" value="0.2" min="0" step="0.05" style="width: 5em;"></label>
+    <label>corner: <input type="number" id="corner-radius" value="2" min="0" step="0.5" style="width: 5em;"></label>
+    <label title="Play the step-by-step reveal animation on each generate. Turn off for an instant-render."><input type="checkbox" id="animate" checked> animate</label>
+    <label title="Milliseconds between reveal steps. 0 = use requestAnimationFrame (fastest, ~16ms/frame). Changes take effect on the next generate or animate toggle.">step ms: <input type="number" id="reveal-step-ms" value="60" min="0" step="10" style="width: 5em;"></label>
+    <button id="generate" type="button">generate (enter)</button>
+    <button id="save" type="button">save (s)</button>
+    <button id="copy-link" type="button">copy link (l)</button>
+    <button id="reset" type="button">reset view (r)</button>
+    <span class="seed" id="seed"></span>
+  </div>
+  <div class="bar">
+    <span>subdivision:</span>
+    <label>stop-weight: <input type="number" id="empty-weight-scale" value="1.0" min="0" step="0.1" style="width: 5em;"></label>
+    <label>divisor-bias: <input type="number" id="divisor-bias" value="1.0" step="0.25" style="width: 5em;"></label>
+    <label>cut-direction-bias: <input type="number" id="cut-direction-bias" value="1.0" step="0.25" style="width: 5em;"></label>
+  </div>
+  <div class="bar" id="variation-params" hidden>
+    <span>variation:</span>
+    <label>mutations: <input type="number" id="mutations" value="20" min="0" step="1" style="width: 4em;"></label>
+    <label>min-depth: <input type="number" id="min-depth" value="0" min="0" step="1" style="width: 4em;"></label>
+    <label>max-depth: <input type="number" id="max-depth" value="4" min="1" step="1" style="width: 4em;"></label>
+    <label>min-dim: <input type="number" id="min-dim" value="3" min="1" step="1" style="width: 4em;"></label>
+  </div>
+  <div class="bar" id="coordinated-params" hidden>
+    <label><input type="checkbox" id="coordinated-circles" checked> coordinated circles</label>
+    <label>count: <input type="number" id="circle-count" value="8" min="1" step="1" style="width: 4em;"></label>
+    <label>along: <input type="number" id="jitter-along" value="0.3" min="0" step="0.05" style="width: 5em;"></label>
+    <label>perp: <input type="number" id="jitter-perp" value="0.2" step="0.05" style="width: 5em;"></label>
+    <label>amplitude: <input type="number" id="amplitude" value="0.25" step="0.05" style="width: 5em;"></label>
+    <label>frequency: <input type="number" id="frequency" value="1.0" min="0" step="0.25" style="width: 5em;"></label>
+    <label><input type="checkbox" id="show-curve"> show curve</label>
+  </div>
+  <div class="bar" id="qr-params" hidden>
+    <label>text:
+      <input type="text" id="text" value="https://kinder.art" style="width: 22em;">
+    </label>
+    <label>ecl:
+      <select id="qr-ecl">
+        <option value="L">L</option>
+        <option value="M">M</option>
+        <option value="Q">Q</option>
+        <option value="H" selected>H</option>
+      </select>
+    </label>
+    <label>quiet zone: <input type="number" id="qr-quiet-zone" value="4" min="0" step="1" style="width: 5em;"></label>
+  </div>
+  <div class="viewport" id="viewport">
+    <div class="canvas" id="canvas">
+      <div class="stage" id="stage"></div>
+    </div>
+  </div>
+</div>
+<div class="view" id="inspiration-view" hidden>
+  <div class="gallery" id="gallery"></div>
+</div>
+<div class="fullscreen" id="fullscreen" hidden>
+  <button class="nav prev" type="button" aria-label="previous">‹</button>
+  <img id="fullscreen-img" alt="">
+  <button class="nav next" type="button" aria-label="next">›</button>
+  <div class="caption" id="fullscreen-caption"></div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="/assets/commits/bd1749eab7da857f3dec3dab01638146201e89ca/main.js"></script>
+</body>
+</html>
