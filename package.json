@@ -11,6 +11,9 @@
     "serve": "shadow-cljs watch app",
     "cli": "node dist/kinder-cli.js"
   },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  },
   "devDependencies": {
     "shadow-cljs": "^2.28.20"
   }

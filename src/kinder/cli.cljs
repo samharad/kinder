@@ -15,12 +15,12 @@
    ["-H" "--height HEIGHT"          "Canvas height in units"         :id :height]
    ["-u" "--unit UNIT"              "Pixels per unit"                :id :unit]
    ["-s" "--seed SEED"              "Fix the seed (string)"          :id :seed]
-   ["-p" "--palette NAME"           "Palette: kinder | anthro-1 | anthro-2" :id :palette]
+   ["-p" "--palette NAME"           "Palette: kinder | anthro-1 | anthro-2 | anthro-3" :id :palette]
    ["-o" "--out PATH"               "Output SVG path"                :id :out]
    ["-n" "--count N"                "Number of pieces (single layout)" :id :count]
-   ["-l" "--layout NAME"            "Layout: single | triptych | triptych-equal | triptych-variation"
+   ["-l" "--layout NAME"            "Layout: single | triptych | triptych-equal | triptych-variation | qr"
     :id :mode
-    :validate [opts/layouts "Must be single, triptych, triptych-equal, or triptych-variation"]]
+    :validate [opts/layouts "Must be single, triptych, triptych-equal, triptych-variation, or qr"]]
    [nil  "--stroke-weight NUM"      "Border thickness in canvas units" :id :stroke-weight]
    [nil  "--empty-weight-scale NUM" "Multiplier on subdivision stop-weights"  :id :empty-weight-scale]
    [nil  "--divisor-bias NUM"       "Exponent shaping even-split divisor choice" :id :divisor-bias]
@@ -38,6 +38,9 @@
    [nil  "--amplitude NUM"          "Sine amplitude (fraction of panel height)" :id :amplitude]
    [nil  "--frequency NUM"          "Sine cycles across triptych width"      :id :frequency]
    [nil  "--show-curve"             "Overlay the coordinated-circles curve"  :id :show-curve]
+   [nil  "--text TEXT"              "Text or URL to encode in QR mode"       :id :text]
+   [nil  "--qr-ecl LEVEL"           "QR error correction: L | M | Q | H"     :id :qr-ecl]
+   [nil  "--qr-quiet-zone INT"      "Quiet-zone width in modules"            :id :qr-quiet-zone]
    ["-O" "--open"                   "Open each SVG after generating"         :id :open]
    ["-h" "--help"                   "Show help"                              :id :help]])
 

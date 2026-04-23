@@ -70,6 +70,11 @@
             [160 10 82]]
    :accent-weights [1 2 1 1]})
 
+(def anthro-3-palette
+  {:main [57 8 93]
+   :accent [[15 55 80]]
+   :accent-weights [1]})
+
 (def palettes [kinder-palette])
 
 (def ^:dynamic palette kinder-palette)

@@ -12,6 +12,7 @@
   live here so `browser.cljs` and `cli.cljs` are thin callers."
   (:require [kinder.core :as core]
             [kinder.options :as opts]
+            [kinder.qr :as qr]
             [kinder.svg :as svg]))
 
 (defn- gen-pane [o pal dim seed]
@@ -63,9 +64,20 @@
 (defn generate-scene
   "Build the panes for the requested mode. Expects a fully-normalized
   options map (see `kinder.options/normalize`) including `:seed`."
-  [{:keys [mode width height seed palette coordinated-circles] :as o}]
+  [{:keys [mode width height seed palette coordinated-circles text qr-ecl qr-quiet-zone corner-radius]
+    :as o}]
   (let [pal (opts/palette-of palette seed)]
     (case mode
+      "qr"
+      (let [encoded (qr/encode text qr-ecl)]
+        {:mode "qr"
+         :pane (qr/generate-pane encoded
+                                 :palette pal
+                                 :quiet-zone qr-quiet-zone
+                                 :corner-radius corner-radius
+                                 :seed (str seed "/qr"))
+         :seed seed})
+
       "single"
       {:mode  "single"
        :panes [(gen-pane o pal [width height] seed)]}
@@ -101,13 +113,17 @@
   "True when every pane's rect tree is fully revealed at `depth`. Used
   by the animation loop so circles stay hidden until the last panel's
   rectangles finish appearing."
-  [{:keys [panes]} depth]
-  (every? (partial pane-rects-done-at? depth) panes))
+  [{:keys [mode pane panes]} depth]
+  (if (= mode "qr")
+    (= (:rect pane) (core/take-rect-depth depth (:rect pane)))
+    (every? (partial pane-rects-done-at? depth) panes)))
 
 (defn total-circles
   "Total number of circles across every pane in `scene`."
-  [{:keys [panes]}]
-  (reduce + 0 (map #(count (:circles %)) panes)))
+  [{:keys [mode panes]}]
+  (if (= mode "qr")
+    0
+    (reduce + 0 (map #(count (:circles %)) panes))))
 
 (defn- truncate-circles
   "Return `panes` with :circles reduced so that only the first `n` total
@@ -136,7 +152,7 @@
   panels finish rect-reveal together before any circle lands."
   ([scene o] (render-scene scene o full-depth))
   ([scene o depth] (render-scene scene o depth (total-circles scene)))
-  ([{:keys [mode] :as scene} {:keys [unit stroke-weight gap]} depth visible-circles]
+  ([{:keys [mode pane] :as scene} {:keys [unit stroke-weight gap]} depth visible-circles]
    (let [rects-done? (scene-rects-done-at? scene depth)
          n-circles   (if rects-done? (max 0 visible-circles) 0)
          panes'      (truncate-circles (:panes scene) n-circles)
@@ -144,6 +160,9 @@
                        (cond-> (core/take-depth depth pane)
                          (not rects-done?) (dissoc :curve-points)))]
      (case mode
+       "qr"
+       (svg/render-qr (core/take-depth depth pane) unit stroke-weight)
+
        "single"
        (svg/render (prep (first panes')) unit stroke-weight)
 
@@ -154,5 +173,7 @@
 
 (defn scene-done-at?
   "True when every pane in `scene` is fully revealed at `depth`."
-  [{:keys [panes]} depth]
-  (every? #(= % (core/take-depth depth %)) panes))
+  [{:keys [mode pane panes]} depth]
+  (if (= mode "qr")
+    (= pane (core/take-depth depth pane))
+    (every? #(= % (core/take-depth depth %)) panes)))

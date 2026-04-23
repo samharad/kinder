@@ -8,9 +8,12 @@
 (def palettes
   {"kinder" core/kinder-palette
    "anthro-1" core/anthro-1-palette
-   "anthro-2" core/anthro-2-palette})
+   "anthro-2" core/anthro-2-palette
+   "anthro-3" core/anthro-3-palette})
 
-(def layouts #{"single" "triptych" "triptych-equal" "triptych-variation"})
+(def layouts #{"single" "triptych" "triptych-equal" "triptych-variation" "qr"})
+
+(def qr-error-levels #{"L" "M" "Q" "H"})
 
 (def defaults
   {:mode                "triptych-variation"
@@ -37,7 +40,10 @@
    :show-curve          false
    :animate             true
    :reveal-step-ms      60
-   :seed                nil})
+   :seed                nil
+   :text                "https://kinder.art"
+   :qr-ecl              "H"
+   :qr-quiet-zone       4})
 
 (defn- blank? [v]
   (or (nil? v) (and (string? v) (str/blank? v))))
@@ -68,7 +74,7 @@
 
 (def ^:private int-keys
   #{:width :height :unit :mutations :min-depth :max-depth :min-dim :circle-count
-    :reveal-step-ms})
+    :reveal-step-ms :qr-quiet-zone})
 
 (def ^:private double-keys
   #{:gap :stroke-weight :empty-weight-scale :divisor-bias :cut-direction-bias
@@ -82,6 +88,10 @@
     (= k :seed)     (when-not (blank? v) (str v))
     (= k :mode)     (when v (str v))
     (= k :palette)  (when v (str v))
+    (= k :text)     (when v (str v))
+    (= k :qr-ecl)   (when v
+                      (let [s (str/upper-case (str v))]
+                        (if (contains? qr-error-levels s) s "H")))
     (int-keys k)    (to-int v)
     (double-keys k) (to-double v)
     (bool-keys k)   (to-bool v)

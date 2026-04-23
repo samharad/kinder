@@ -58,7 +58,12 @@
    :jitter-perp        "jitter-perp"
    :amplitude          "amplitude"
    :frequency          "frequency"
-   :reveal-step-ms     "reveal-step-ms"})
+   :reveal-step-ms     "reveal-step-ms"
+   :qr-quiet-zone      "qr-quiet-zone"})
+
+(def ^:private text-inputs
+  {:text   "text"
+   :qr-ecl "qr-ecl"})
 
 (def ^:private checkbox-inputs
   {:coordinated-circles "coordinated-circles"
@@ -72,8 +77,10 @@
 
 (defn- read-form []
   (let [from-numbers  (into {} (map (fn [[k id]] [k (val-of id)]) number-inputs))
+        from-text     (into {} (map (fn [[k id]] [k (val-of id)]) text-inputs))
         from-checkbox (into {} (map (fn [[k id]] [k (checked? id)]) checkbox-inputs))]
     (merge from-numbers
+           from-text
            from-checkbox
            {:mode    (current-mode)
             :palette (val-of "palette")})))
@@ -246,9 +253,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn- sync-variation-visibility! []
-  (let [show? (= "triptych-variation" (current-mode))]
-    (set! (.-hidden (el "variation-params"))   (not show?))
-    (set! (.-hidden (el "coordinated-params")) (not show?))))
+  (let [mode       (current-mode)
+        variation? (= "triptych-variation" mode)
+        qr?        (= "qr" mode)]
+    (set! (.-hidden (el "variation-params"))   (not variation?))
+    (set! (.-hidden (el "coordinated-params")) (not variation?))
+    (set! (.-hidden (el "qr-params"))          (not qr?))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; View tabs and inspiration gallery
@@ -375,7 +385,7 @@
       (animate-reveal! scene o))))
 
 (defn- bind-inputs! []
-  (doseq [[k id] (concat number-inputs checkbox-inputs)]
+  (doseq [[k id] (concat number-inputs text-inputs checkbox-inputs)]
     (let [e        (el id)
           handler  (if (display-only-keys k)
                      (fn [_] (replay-animation!))

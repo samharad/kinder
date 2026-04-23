@@ -68,11 +68,21 @@
              (hex2 (rng/round (* 255.0 (+ g m))))
              (hex2 (rng/round (* 255.0 (+ b m)))))))))
 
+(defn- leaf-rects [rect]
+  (if (seq (:children rect))
+    (mapcat leaf-rects (:children rect))
+    [rect]))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Elements
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def ^:private child-bearer-fill "#000000")
+
+(defn- stroke-attrs [sw]
+  (if (pos? sw)
+    (str " stroke=\"#000\" stroke-width=\"" (fmt-fixed sw 2) "\"")
+    ""))
 
 (defn- rect-el [{:keys [dim loc color children radius]} unit sw]
   (let [[w h] dim
@@ -85,7 +95,7 @@
          "\" height=\"" (fmt-fixed (* h unit) 2)
          "\" rx=\"" (fmt-fixed rx 0)
          "\" fill=\"" fill
-         "\" stroke=\"#000\" stroke-width=\"" (fmt-fixed sw 2) "\"/>")))
+         "\"" (stroke-attrs sw) "/>")))
 
 (defn- circle-el [{:keys [loc rad color]} unit sw]
   (let [[cx cy] loc]
@@ -93,7 +103,7 @@
          "\" cy=\"" (fmt-fixed (* cy unit) 2)
          "\" r=\"" (fmt-fixed (/ (* rad unit) 2.0) 2)
          "\" fill=\"" (hsb->hex color)
-         "\" stroke=\"#000\" stroke-width=\"" (fmt-fixed sw 2) "\"/>")))
+         "\"" (stroke-attrs sw) "/>")))
 
 (defn- curve-el
   "Dev overlay: renders :curve-points as a faint dashed polyline so the
@@ -133,17 +143,19 @@
         clip     (str "<clipPath id=\"" clip-id
                       "\"><rect x=\"0\" y=\"0\" width=\"" (fmt-fixed pw 2)
                       "\" height=\"" (fmt-fixed ph 2) "\"/></clipPath>")
-        border   (str "<rect x=\"0\" y=\"0\" width=\"" (fmt-fixed pw 2)
-                      "\" height=\"" (fmt-fixed ph 2)
-                      "\" fill=\"none\" stroke=\"#000\" stroke-width=\""
-                      (fmt-fixed sw 2) "\"/>")]
+        border   (when (pos? sw)
+                   (str "<rect x=\"0\" y=\"0\" width=\"" (fmt-fixed pw 2)
+                        "\" height=\"" (fmt-fixed ph 2)
+                        "\" fill=\"none\" stroke=\"#000\" stroke-width=\""
+                        (fmt-fixed sw 2) "\"/>"))]
     (concat
       [clip
        (str "<g clip-path=\"url(#" clip-id ")\">")]
       @rect-els
       (when curve [curve])
       circle-els
-      ["</g>" border])))
+      ["</g>"]
+      (when border [border]))))
 
 (defn- svg-doc [width height body-lines]
   (str/join "\n"
@@ -167,6 +179,12 @@
         [(str "<g transform=\"translate(" (fmt-fixed sw 2) "," (fmt-fixed sw 2) ")\">")]
         (pane-els pane unit sw "pane")
         ["</g>"]))))
+
+(defn render-qr
+  "Render a QR pane from its subdivision tree, including black lead
+  lines around each leaf rect."
+  [pane unit stroke-weight-units]
+  (render pane unit stroke-weight-units))
 
 (defn render-triptych
   "Returns an SVG string with three panes in a configurable width ratio,
