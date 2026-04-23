@@ -1,8 +1,8 @@
 (ns kinder.browser
   "Browser-local kinder runtime. Reads controls, generates panes and SVG
   locally using the shared CLJC generator and renderer, injects the
-  result into the DOM, and handles progressive reveal, save, pan/zoom,
-  and the inspiration gallery."
+  result into the DOM, and handles progressive reveal, save, share URL
+  sync, pan/zoom, and the inspiration gallery."
   (:require [kinder.layouts :as layouts]
             [kinder.options :as opts]
             [kinder.rng :as rng]))
@@ -29,11 +29,17 @@
 (defn- el [id] (.getElementById js/document id))
 (defn- val-of [id] (.-value (el id)))
 (defn- checked? [id] (.-checked (el id)))
+(defn- set-val! [id v] (set! (.-value (el id)) (str v)))
+(defn- set-checked! [id checked] (set! (.-checked (el id)) (boolean checked)))
 
 (defn- current-mode []
   (or (some (fn [n] (when (.-checked n) (.-value n)))
             (array-seq (.querySelectorAll js/document "input[name=mode]")))
       "triptych-variation"))
+
+(defn- set-mode! [mode]
+  (doseq [n (array-seq (.querySelectorAll js/document "input[name=mode]"))]
+    (set! (.-checked n) (= (.-value n) mode))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Form → normalized options
@@ -75,6 +81,16 @@
 ;; on change.
 (def ^:private display-only-keys #{:animate :reveal-step-ms})
 
+(defn- apply-opts-to-form! [o]
+  (doseq [[k id] number-inputs]
+    (set-val! id (get o k)))
+  (doseq [[k id] text-inputs]
+    (set-val! id (get o k)))
+  (doseq [[k id] checkbox-inputs]
+    (set-checked! id (get o k)))
+  (set-mode! (:mode o))
+  (set-val! "palette" (:palette o)))
+
 (defn- read-form []
   (let [from-numbers  (into {} (map (fn [[k id]] [k (val-of id)]) number-inputs))
         from-text     (into {} (map (fn [[k id]] [k (val-of id)]) text-inputs))
@@ -86,6 +102,47 @@
             :palette (val-of "palette")})))
 
 (defn- current-opts [] (opts/normalize (read-form)))
+
+(defn- local-form-opts []
+  (select-keys (or (:opts @app-state) (current-opts))
+               display-only-keys))
+
+(defn- current-share-url [o]
+  (let [loc    (.-location js/window)
+        params (js/URLSearchParams.)]
+    (doseq [[k v] (opts/share-param-pairs o)]
+      (.set params k v))
+    (str (.-origin loc)
+         (.-pathname loc)
+         "?"
+         (.toString params)
+         (.-hash loc))))
+
+(defn- sync-share-url! [o history-mode]
+  (let [url   (current-share-url o)
+        state #js {:seed (:seed o)}]
+    (case history-mode
+      :push    (.pushState (.-history js/window) state "" url)
+      :replace (.replaceState (.-history js/window) state "" url)
+      nil)))
+
+(defn- read-location-query []
+  (let [params (js/URLSearchParams. (.-search (.-location js/window)))
+        query  (atom {})]
+    (.forEach params (fn [v k] (swap! query assoc k v)))
+    @query))
+
+(defn- shared-opts-from-location []
+  (let [recognized (opts/share-query-input (read-location-query))]
+    (when (seq recognized)
+      (select-keys (opts/normalize recognized)
+                   opts/share-keys))))
+
+(defn- shared-opts-for-form []
+  (when-let [shared (shared-opts-from-location)]
+    (merge (current-opts)
+           (local-form-opts)
+           shared)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Progressive reveal
@@ -144,15 +201,17 @@
 
 (defn generate!
   ([] (generate! {}))
-  ([{:keys [reuse-seed?]}]
-   (let [o       (current-opts)
+  ([{:keys [reuse-seed? history-mode opts]}]
+   (let [o       (or opts (current-opts))
          prior   (:opts @app-state)
-         seed    (if (and reuse-seed? (:seed prior))
-                   (:seed prior)
-                   (rng/ambient-seed))
+         seed    (cond
+                   (:seed o) (:seed o)
+                   (and reuse-seed? (:seed prior)) (:seed prior)
+                   :else (rng/ambient-seed))
          o       (assoc o :seed seed)
          scene   (layouts/generate-scene o)]
      (swap! app-state assoc :scene scene :opts o)
+     (sync-share-url! o (or history-mode (if reuse-seed? :replace :push)))
      (update-seed-display! seed (:mode o))
      (animate-reveal! scene o))))
 
@@ -197,6 +256,17 @@
                       (when-not (= (.-name err) "AbortError")
                         (js/console.warn "save-via-picker failed, falling back" err)
                         (save-blob!)))))))))
+
+(defn copy-share-link! []
+  (when-let [o (:opts @app-state)]
+    (let [url (current-share-url o)]
+      (if-let [clipboard (.. js/navigator -clipboard)]
+        (-> (.writeText clipboard url)
+            (.then (fn [] (show-toast! "link copied")))
+            (.catch (fn [err]
+                      (js/console.warn "clipboard write failed" err)
+                      (show-toast! "copy failed"))))
+        (show-toast! "clipboard unavailable")))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Pan / zoom on the viewport
@@ -360,6 +430,7 @@
       (case (.-key e)
         "Enter"       (do (.preventDefault e) (generate!))
         ("s" "S")     (do (.preventDefault e) (save!))
+        ("l" "L")     (do (.preventDefault e) (copy-share-link!))
         ("r" "R" "0") (do (.preventDefault e) (reset-view!))
         nil)
       (= "inspiration" view-name)
@@ -407,6 +478,7 @@
 (defn- bind-buttons! []
   (.addEventListener (el "generate") "click" (fn [_] (generate!)))
   (.addEventListener (el "save")     "click" (fn [_] (save!)))
+  (.addEventListener (el "copy-link") "click" (fn [_] (copy-share-link!)))
   (.addEventListener (el "reset")    "click" (fn [_] (reset-view!))))
 
 (defn- bind-view-tabs! []
@@ -443,5 +515,17 @@
   (bind-viewport!)
   (bind-fullscreen!)
   (.addEventListener js/document "keydown" on-key-down)
-  (sync-variation-visibility!)
-  (generate!))
+  (.addEventListener js/window "popstate"
+                     (fn [_]
+                       (when-let [shared (shared-opts-for-form)]
+                         (apply-opts-to-form! shared)
+                         (sync-variation-visibility!)
+                         (generate! {:opts shared :history-mode :replace}))))
+  (if-let [shared (shared-opts-for-form)]
+    (do
+      (apply-opts-to-form! shared)
+      (sync-variation-visibility!)
+      (generate! {:opts shared :history-mode :replace}))
+    (do
+      (sync-variation-visibility!)
+      (generate! {:history-mode :replace}))))

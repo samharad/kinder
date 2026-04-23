@@ -45,6 +45,67 @@
    :qr-ecl              "H"
    :qr-quiet-zone       4})
 
+(def share-keys
+  [:seed
+   :mode
+   :palette
+   :width
+   :height
+   :unit
+   :gap
+   :stroke-weight
+   :corner-radius
+   :empty-weight-scale
+   :divisor-bias
+   :cut-direction-bias
+   :mutations
+   :min-depth
+   :max-depth
+   :min-dim
+   :coordinated-circles
+   :circle-count
+   :jitter-along
+   :jitter-perp
+   :amplitude
+   :frequency
+   :show-curve
+   :text
+   :qr-ecl
+   :qr-quiet-zone])
+
+(def ^:private share-key-set (set share-keys))
+
+(def ^:private share-param-names
+  {:seed                "s"
+   :mode                "m"
+   :palette             "p"
+   :width               "w"
+   :height              "h"
+   :unit                "u"
+   :gap                 "g"
+   :stroke-weight       "sw"
+   :corner-radius       "cr"
+   :empty-weight-scale  "ews"
+   :divisor-bias        "db"
+   :cut-direction-bias  "cdb"
+   :mutations           "mu"
+   :min-depth           "mind"
+   :max-depth           "maxd"
+   :min-dim             "minw"
+   :coordinated-circles "cc"
+   :circle-count        "cn"
+   :jitter-along        "ja"
+   :jitter-perp         "jp"
+   :amplitude           "a"
+   :frequency           "f"
+   :show-curve          "sc"
+   :text                "t"
+   :qr-ecl              "e"
+   :qr-quiet-zone       "qz"})
+
+(def ^:private share-param-keys
+  (reduce-kv (fn [acc k v] (assoc acc v k)) {} share-param-names))
+
 (defn- blank? [v]
   (or (nil? v) (and (string? v) (str/blank? v))))
 
@@ -110,6 +171,94 @@
                          coerced))))
       {}
       merged)))
+
+(defn- share-param-value [v]
+  (cond
+    (nil? v)         nil
+    (boolean? v)     (if v "true" "false")
+    :else            (str v)))
+
+(defn- relevant-share-keys
+  [{:keys [mode coordinated-circles]}]
+  (case mode
+    "qr"
+    [:seed
+     :mode
+     :palette
+     :unit
+     :stroke-weight
+     :corner-radius
+     :text
+     :qr-ecl
+     :qr-quiet-zone]
+
+    "triptych-variation"
+    (into [:seed
+           :mode
+           :palette
+           :width
+           :height
+           :unit
+           :gap
+           :stroke-weight
+           :corner-radius
+           :empty-weight-scale
+           :divisor-bias
+           :cut-direction-bias
+           :mutations
+           :min-depth
+           :max-depth
+           :min-dim
+           :coordinated-circles]
+          (when coordinated-circles
+            [:circle-count
+             :jitter-along
+             :jitter-perp
+             :amplitude
+             :frequency
+             :show-curve]))
+
+    ("single" "triptych" "triptych-equal")
+    [:seed
+     :mode
+     :palette
+     :width
+     :height
+     :unit
+     :gap
+     :stroke-weight
+     :corner-radius
+     :empty-weight-scale
+     :divisor-bias
+     :cut-direction-bias]
+
+    share-keys))
+
+(defn share-param-pairs
+  "Return canonical query-param pairs for a fully-specified artwork URL."
+  [o]
+  (let [normalized (normalize o)]
+    (into []
+          (keep (fn [k]
+                  (let [v (get normalized k)]
+                    (when (or (= k :seed)
+                              (not= v (get defaults k)))
+                      (when-let [encoded (share-param-value v)]
+                        [(get share-param-names k (name k)) encoded])))))
+          (relevant-share-keys normalized))))
+
+(defn share-query-input
+  "Filter a string-keyed query map down to recognized share params."
+  [query]
+  (reduce-kv
+    (fn [acc k v]
+      (let [kw (or (get share-param-keys k)
+                   (keyword k))]
+        (if (share-key-set kw)
+          (assoc acc kw v)
+          acc)))
+    {}
+    query))
 
 (defn palette-of
   "Resolve a palette name to a palette map. Falls back to the kinder palette."
