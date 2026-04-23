@@ -93,5 +93,32 @@ are listed in `public/inspiration.json`. The browser fetches that
 manifest for the gallery view. Add a new file and append its name to the
 manifest.
 
+## GitHub Pages deployment
+
+The browser app is published via GitHub Pages with commit-versioned
+snapshots.
+
+- Pushes to `master` trigger `.github/workflows/pages.yml`.
+- The workflow assembles the published site into the `gh-pages` branch.
+- The custom domain is `https://kinder.samadams.dev/`.
+- The root URL `/` is a small client-side redirect page that forwards to
+  the latest deployed snapshot `/<short-sha>/`.
+- Historical snapshots are immutable and live at
+  `https://kinder.samadams.dev/<short-sha>/`.
+- Snapshot HTML points at commit-scoped assets under
+  `/assets/commits/<full-sha>/main.js`, so old URLs keep working after
+  later deploys.
+- Shared assets such as `inspiration/` and `inspiration.json` are
+  published once at the site root and reused by every snapshot.
+- Deployment metadata lives in `/versions.json` on the published site.
+
+When changing the browser app or deploy flow:
+
+- Keep archived snapshot paths immutable once published.
+- Preserve the distinction between local dev output in `public/` and the
+  assembled Pages output in `gh-pages`.
+- If the app's root-relative asset URLs change, update the Pages
+  assembler in `scripts/pages-build.mjs` accordingly.
+
 (`AGENTS.md` is a symlink to this file — update this file and both
 reflect the change.)
