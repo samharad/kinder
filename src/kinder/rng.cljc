@@ -62,10 +62,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn ambient-seed
-  "A fresh string seed, portable across CLJ and CLJS."
+  "A fresh 8-char lowercase hex seed, portable across CLJ and CLJS."
   []
-  #?(:clj  (str (java.util.UUID/randomUUID))
-     :cljs (str (random-uuid))))
+  #?(:clj  (subs (str (java.util.UUID/randomUUID)) 0 8)
+     :cljs (subs (str (random-uuid)) 0 8)))
 
 (defn make-rng
   "Build a fresh RNG keyed to `seed` (string or number). With no arg
