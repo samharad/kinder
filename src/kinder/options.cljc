@@ -9,7 +9,8 @@
   {"kinder" core/kinder-palette
    "anthro-1" core/anthro-1-palette
    "anthro-2" core/anthro-2-palette
-   "anthro-3" core/anthro-3-palette})
+   "anthro-3" core/anthro-3-palette
+   "black-and-white" core/black-and-white-palette})
 
 (def layouts #{"single" "triptych" "triptych-equal" "triptych-variation" "qr"})
 

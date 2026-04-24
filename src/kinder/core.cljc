@@ -75,7 +75,13 @@
    :accent [[15 55 80]]
    :accent-weights [1]})
 
-(def palettes [kinder-palette])
+(def black-and-white-palette
+  {:main [0 0 100]
+   :accent [[0 0 0]]
+   :accent-weights [1]})
+
+(def palettes [kinder-palette
+               black-and-white-palette])
 
 (def ^:dynamic palette kinder-palette)
 (def ^:dynamic seed-rect {:dim [0 0]})

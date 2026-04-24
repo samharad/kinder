@@ -228,7 +228,7 @@
           qr-name         (opts/svg-filename filename-base "-QR-code")
           qr-opts         (assoc o
                                  :mode "qr"
-                                 :palette "kinder"
+                                 :palette "black-and-white"
                                  :text share-url
                                  :seed (str (:seed o) "/save-qr"))
           qr-scene        (layouts/generate-scene qr-opts)
