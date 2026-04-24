@@ -15,6 +15,7 @@
   (atom {:scene        nil
          :opts         nil
          :anim-token   0
+         :controls-open? false
          :view         {:scale 1.0 :tx 0.0 :ty 0.0}
          :drag         nil
          :view-name    "generate"
@@ -199,6 +200,20 @@
     (.add (.-classList t) "show")
     (js/setTimeout #(.remove (.-classList t) "show") 1800)))
 
+(defn- sync-controls-toggle! []
+  (let [open? (:controls-open? @app-state)
+        btn   (el "toggle-controls")]
+    (set! (.-textContent btn) (if open? "hide params" "show params"))
+    (.setAttribute btn "aria-expanded" (if open? "true" "false"))))
+
+(defn- set-controls-open! [open?]
+  (swap! app-state assoc :controls-open? open?)
+  (set! (.-hidden (el "controls-panel")) (not open?))
+  (sync-controls-toggle!))
+
+(defn- toggle-controls! []
+  (set-controls-open! (not (:controls-open? @app-state))))
+
 (defn generate!
   ([] (generate! {}))
   ([{:keys [reuse-seed? history-mode opts]}]
@@ -382,6 +397,7 @@
   (swap! app-state assoc :view-name name)
   (doseq [[k id] {"generate" "generate-view" "inspiration" "inspiration-view"}]
     (set! (.-hidden (el id)) (not= k name)))
+  (set! (.-hidden (el "header-actions")) (not= name "generate"))
   (doseq [b (array-seq (.querySelectorAll js/document ".view-tabs button"))]
     (if (= (.. b -dataset -view) name)
       (.add (.-classList b) "active")
@@ -518,6 +534,7 @@
                      (fn [_] (generate! {:reuse-seed? true}))))
 
 (defn- bind-buttons! []
+  (.addEventListener (el "toggle-controls") "click" (fn [_] (toggle-controls!)))
   (.addEventListener (el "generate") "click" (fn [_] (generate!)))
   (.addEventListener (el "save")     "click" (fn [_] (save!)))
   (.addEventListener (el "copy-link") "click" (fn [_] (copy-share-link!)))
@@ -556,6 +573,8 @@
   (bind-view-tabs!)
   (bind-viewport!)
   (bind-fullscreen!)
+  (set-controls-open! false)
+  (set-view! "generate")
   (.addEventListener js/document "keydown" on-key-down)
   (.addEventListener js/window "popstate"
                      (fn [_]
